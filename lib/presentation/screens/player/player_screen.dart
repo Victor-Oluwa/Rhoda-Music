@@ -49,7 +49,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with SingleTickerPr
     final handler = ref.watch(audioHandlerProvider);
     final playlistBloc = ref.watch(playlistBlocProvider);
 
-    // Side effect: Add to recent when track changes
+    // Side effect: Add to recent when track changes llllllllll
     ref.listen(currentSongProvider, (previous, next) {
       final song = next.value;
       if (song != null && song.id != _lastTrackPath) {

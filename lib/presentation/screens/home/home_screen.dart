@@ -80,6 +80,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
           }
         },
         child: Scaffold(
+          resizeToAvoidBottomInset: false, // Prevents layout shifts when keyboard appears
           body: Stack(
             children: [
               Positioned.fill(
@@ -246,10 +247,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
         final handler = ref.read(audioHandlerProvider) as RhodaAudioHandler;
         final victorSong = const Song(
           id: 'asset:///assets/music/victor_track.mp3',
-          title: 'From Victor',
+          title: 'Candle Light',
           artist: 'Victor Special',
           album: 'Asset Collection',
-          duration: Duration(minutes: 3, seconds: 45),
+          duration: Duration(seconds: 33),
           path: 'asset:///assets/music/victor_track.mp3',
         );
         await handler.setQueueAndPlay([victorSong.toMediaItem()], 0);
@@ -297,17 +298,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                       borderRadius: BorderRadius.circular(20.r),
                     ),
                     child: Text(
-                      "FEATURED",
+                      "THE FOUNDATION",
                       style: TextStyle(color: Colors.white, fontSize: 9.sp, fontWeight: FontWeight.bold, letterSpacing: 1),
                     ),
                   ),
                   SizedBox(height: 10.h),
                   Text(
-                    "FROM VICTOR",
+                    "VICTOR SPECIAL",
                     style: TextStyle(color: Colors.white, fontSize: 18.sp, fontWeight: FontWeight.w900),
                   ),
                   Text(
-                    "Curated Aesthetic",
+                    "CANDLE LIGHT",
                     style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 12.sp),
                   ),
                 ],
@@ -799,6 +800,9 @@ class _SongTile extends ConsumerWidget {
       child: ListTile(
         contentPadding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 4.h),
         onTap: () async {
+          // Explicitly dismiss keyboard before navigation to prevent overflow/screen tear
+          FocusScope.of(context).unfocus();
+          
           final handler = ref.read(audioHandlerProvider) as RhodaAudioHandler;
           final queue = songs ?? [song];
           await handler.setQueueAndPlay(queue.map((s) => s.toMediaItem()).toList(), index ?? 0);
@@ -939,7 +943,10 @@ class MiniPlayer extends ConsumerWidget {
     final playing = playbackState?.playing ?? false;
 
     return GestureDetector(
-      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const PlayerScreen())),
+      onTap: () {
+        FocusScope.of(context).unfocus();
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const PlayerScreen()));
+      },
       child: Container(
         height: 72.h,
         margin: EdgeInsets.fromLTRB(16.w, 0, 16.w, 24.h),
