@@ -79,60 +79,75 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
             _libraryBloc.add(LoadLibraryEvent(state.songs));
           }
         },
-        child: Scaffold(
-          resizeToAvoidBottomInset: false, // Prevents layout shifts when keyboard appears
-          body: Stack(
-            children: [
-              Positioned.fill(
-                child: CustomPaint(
-                  painter: BackgroundPainter(),
-                ),
-              ),
-              SafeArea(
-                bottom: false,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildHeader(),
-                    _buildSearchBar(context),
-                    if (!_isSearchActive) ...[
-                      _buildQuickActions(),
-                      SizedBox(height: 20.h),
-                      _buildTabMenu(),
-                    ],
-                    Expanded(
-                      child: _isSearchActive
-                          ? _SearchResultsView()
-                          : TabBarView(
-                              controller: _tabController,
-                              physics: const BouncingScrollPhysics(),
-                              children: [
-                                _SongsTabView(),
-                                _PlaylistsTabView(),
-                                _LibraryGroupView(groupType: LibraryGroupType.artist),
-                                _LibraryGroupView(groupType: LibraryGroupType.album),
-                                _LibraryGroupView(groupType: LibraryGroupType.genre),
-                                _LibraryGroupView(groupType: LibraryGroupType.folder),
-                              ],
-                            ),
+        child: BlocBuilder<MusicScannerBloc, MusicScannerState>(
+          builder: (context, scannerState) {
+            final bool isScanning = scannerState is MusicScannerLoading;
+
+            return Scaffold(
+              resizeToAvoidBottomInset: false,
+              body: Stack(
+                children: [
+                  Positioned.fill(
+                    child: CustomPaint(
+                      painter: BackgroundPainter(),
                     ),
-                  ],
-                ),
+                  ),
+                  IgnorePointer(
+                    ignoring: isScanning,
+                    child: AnimatedOpacity(
+                      duration: const Duration(milliseconds: 300),
+                      opacity: isScanning ? 0.6 : 1.0,
+                      child: SafeArea(
+                        bottom: false,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _buildHeader(isScanning),
+                            _buildSearchBar(context),
+                            if (!_isSearchActive) ...[
+                              _buildQuickActions(),
+                              SizedBox(height: 20.h),
+                              _buildTabMenu(isScanning),
+                            ],
+                            Expanded(
+                              child: _isSearchActive
+                                  ? _SearchResultsView()
+                                  : TabBarView(
+                                      controller: _tabController,
+                                      physics: isScanning
+                                          ? const NeverScrollableScrollPhysics()
+                                          : const BouncingScrollPhysics(),
+                                      children: [
+                                        _SongsTabView(),
+                                        _PlaylistsTabView(),
+                                        _LibraryGroupView(groupType: LibraryGroupType.artist),
+                                        _LibraryGroupView(groupType: LibraryGroupType.album),
+                                        _LibraryGroupView(groupType: LibraryGroupType.genre),
+                                        _LibraryGroupView(groupType: LibraryGroupType.folder),
+                                      ],
+                                    ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    child: const MiniPlayer(),
+                  ),
+                ],
               ),
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 0,
-                child: const MiniPlayer(),
-              ),
-            ],
-          ),
+            );
+          },
         ),
       ),
     );
   }
 
-  Widget _buildHeader() {
+  Widget _buildHeader(bool isScanning) {
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 10.h),
       child: Row(
@@ -162,8 +177,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
             ],
           ),
           _buildCircleButton(
-            icon: Icons.refresh_rounded,
-            onPressed: () => _scannerBloc.add(ScanMusicEvent()),
+            icon: isScanning ? Icons.hourglass_empty_rounded : Icons.refresh_rounded,
+            onPressed: isScanning ? () {} : () => _scannerBloc.add(ScanMusicEvent()),
           ),
         ],
       ),
@@ -362,7 +377,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
     );
   }
 
-  Widget _buildTabMenu() {
+  Widget _buildTabMenu(bool isScanning) {
     return Container(
       height: 40.h,
       margin: EdgeInsets.only(bottom: 10.h),

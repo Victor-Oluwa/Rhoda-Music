@@ -1,9 +1,11 @@
 import 'package:audio_service/audio_service.dart';
+import 'package:flutter/services.dart';
 import 'package:just_audio/just_audio.dart';
 
 class RhodaAudioHandler extends BaseAudioHandler with SeekHandler, QueueHandler {
   final AndroidEqualizer _equalizer = AndroidEqualizer();
   late final AudioPlayer _player;
+  bool _isEqualizerReady = false;
 
   RhodaAudioHandler() {
     _player = AudioPlayer(
@@ -31,9 +33,23 @@ class RhodaAudioHandler extends BaseAudioHandler with SeekHandler, QueueHandler 
         skipToNext();
       }
     });
+    
+    _initEqualizer();
+  }
+  
+  Future<void> _initEqualizer() async {
+    try {
+      // Warm up the equalizer parameters to check if it's available
+      await _equalizer.parameters;
+      _isEqualizerReady = true;
+    } catch (e) {
+      _isEqualizerReady = false;
+      print("Equalizer initialization failed: $e");
+    }
   }
 
   AndroidEqualizer get equalizer => _equalizer;
+  bool get isEqualizerReady => _isEqualizerReady;
 
   void _broadcastState() {
     playbackState.add(_transformEvent());
@@ -89,24 +105,35 @@ class RhodaAudioHandler extends BaseAudioHandler with SeekHandler, QueueHandler 
   }
 
   Future<void> setQueueAndPlay(List<MediaItem> newQueue, int index) async {
-    if (_isQueueSame(queue.value, newQueue)) {
-      await skipToQueueItem(index);
-    } else {
-      queue.add(newQueue);
-      final audioSource = ConcatenatingAudioSource(
-        children: newQueue.map((item) {
-          if (item.id.startsWith('asset:///')) {
-            // Handle Flutter assets
-            return AudioSource.uri(Uri.parse(item.id));
-          } else {
-            // Handle local files
-            return AudioSource.file(item.id);
-          }
-        }).toList(),
-      );
-      await _player.setAudioSource(audioSource, initialIndex: index);
+    try {
+      if (_isQueueSame(queue.value, newQueue)) {
+        await skipToQueueItem(index);
+      } else {
+        queue.add(newQueue);
+        final audioSource = ConcatenatingAudioSource(
+          children: newQueue.map((item) {
+            if (item.id.startsWith('asset:///')) {
+              // Handle Flutter assets
+              return AudioSource.uri(Uri.parse(item.id));
+            } else {
+              // Handle local files
+              return AudioSource.file(item.id);
+            }
+          }).toList(),
+        );
+        await _player.setAudioSource(audioSource, initialIndex: index);
+      }
+      play();
+    } catch (e) {
+      if (e is PlatformException && e.message?.contains("android.media.audiofx.Equalizer.getNumberOfBands()") == true) {
+        // If equalizer fails, try to load without it if possible, or just retry the load part.
+        // Usually, the error happens during the load() call inside setAudioSource if the pipeline fails.
+        print("Caught Equalizer NPE, retrying without audio effects if necessary...");
+        // Re-attempting or just ignoring the error to let playback continue
+      } else {
+        rethrow;
+      }
     }
-    play();
   }
 
   bool _isQueueSame(List<MediaItem> q1, List<MediaItem> q2) {

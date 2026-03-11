@@ -20,6 +20,7 @@ class _EqualizerSheetState extends ConsumerState<EqualizerSheet> {
   List<AndroidEqualizerBand>? _bands;
   bool _isEnabled = false;
   String _selectedPreset = "Flat";
+  bool _isNotAvailable = false;
   
   // State for local message
   String? _message;
@@ -39,12 +40,25 @@ class _EqualizerSheetState extends ConsumerState<EqualizerSheet> {
 
   Future<void> _initEqualizer() async {
     final handler = ref.read(audioHandlerProvider) as RhodaAudioHandler;
+    if (!handler.isEqualizerReady) {
+      setState(() {
+        _isNotAvailable = true;
+      });
+      return;
+    }
+
     _equalizer = handler.equalizer;
     if (_equalizer != null) {
-      final parameters = await _equalizer!.parameters;
-      _bands = parameters.bands;
-      _isEnabled = _equalizer!.enabled;
-      setState(() {});
+      try {
+        final parameters = await _equalizer!.parameters;
+        _bands = parameters.bands;
+        _isEnabled = _equalizer!.enabled;
+        setState(() {});
+      } catch (e) {
+        setState(() {
+          _isNotAvailable = true;
+        });
+      }
     }
   }
 
@@ -109,11 +123,11 @@ class _EqualizerSheetState extends ConsumerState<EqualizerSheet> {
                   children: [
                     _buildHeader(),
                     SizedBox(height: 30.h),
-                    if (_equalizer == null)
+                    if (_isNotAvailable)
                       const Expanded(
                         child: Center(
                           child: Text(
-                            "Equalizer is only available on Android",
+                            "Equalizer is currently unavailable on this device",
                             style: TextStyle(color: Colors.white70),
                           ),
                         ),
@@ -207,16 +221,17 @@ class _EqualizerSheetState extends ConsumerState<EqualizerSheet> {
             ),
           ],
         ),
-        Switch.adaptive(
-          value: _isEnabled,
-          activeTrackColor: AppColors.primary,
-          onChanged: (value) async {
-            if (_equalizer != null) {
-              await _equalizer!.setEnabled(value);
-              setState(() => _isEnabled = value);
-            }
-          },
-        ),
+        if (!_isNotAvailable)
+          Switch.adaptive(
+            value: _isEnabled,
+            activeTrackColor: AppColors.primary,
+            onChanged: (value) async {
+              if (_equalizer != null) {
+                await _equalizer!.setEnabled(value);
+                setState(() => _isEnabled = value);
+              }
+            },
+          ),
       ],
     );
   }
