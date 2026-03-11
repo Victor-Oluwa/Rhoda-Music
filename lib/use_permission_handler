@@ -1,0 +1,100 @@
+Upgrade pre-1.12 Android projects
+
+Since version 4.4.0 this plugin is implemented using the Flutter 1.12 Android plugin APIs. Unfortunately, this means App developers also need to migrate their Apps to support the new Android infrastructure. You can do so by following the Upgrading pre 1.12 Android projects migration guide. Failing to do so might result in unexpected behavior. The most common known error is the permission_handler not returning after calling the .request() method on permission.
+
+AndroidX
+
+As of version 3.1.0, the permission_handler plugin switched to the AndroidX version of the Android Support Libraries. This means you need to make sure your Android project is also upgraded to support AndroidX. Detailed instructions can be found here.
+
+The TL;DR version is:
+
+Add the following to your "gradle.properties" file:
+android.useAndroidX=true
+android.enableJetifier=true
+Make sure you set the compileSdkVersion in your "android/app/build.gradle" file to 33:
+android {
+  compileSdkVersion 35
+  ...
+}
+Make sure you replace all the android. dependencies to their AndroidX counterparts (a full list can be found here).
+Add permissions to your AndroidManifest.xml file. There are debug, main, and profile versions which are chosen depending on how you start your app. In general, it's sufficient to add permission only to the main version. Here's an example AndroidManifest.xml with a complete list of all possible permissions.
+
+
+How to use
+There are a number of Permissions. You can get a Permission's status, which is either granted, denied, restricted, permanentlyDenied, limited, or provisional.
+
+var status = await Permission.camera.status;
+if (status.isDenied) {
+  // We haven't asked for permission yet or the permission has been denied before, but not permanently.
+}
+
+// You can also directly ask permission about its status.
+if (await Permission.location.isRestricted) {
+  // The OS restricts access, for example, because of parental controls.
+}
+Can use also this style for better readability of your code when using the Permission class.
+
+await Permission.camera
+  .onDeniedCallback(() {
+    // Your code
+  })
+  .onGrantedCallback(() {
+    // Your code
+  })
+  .onPermanentlyDeniedCallback(() {
+    // Your code
+  })
+  .onRestrictedCallback(() {
+    // Your code
+  })
+  .onLimitedCallback(() {
+    // Your code
+  })
+  .onProvisionalCallback(() {
+    // Your code
+  })
+  .request();
+Call request() on a Permission to request it. If it has already been granted before, nothing happens.
+request() returns the new status of the Permission.
+
+if (await Permission.contacts.request().isGranted) {
+  // Either the permission was already granted before or the user just granted it.
+}
+
+// You can request multiple permissions at once.
+Map<Permission, PermissionStatus> statuses = await [
+  Permission.location,
+  Permission.storage,
+].request();
+print(statuses[Permission.location]);
+Some permissions, for example, location or acceleration sensor permissions, have an associated service, which can be enabled or disabled.
+
+if (await Permission.locationWhenInUse.serviceStatus.isEnabled) {
+  // Use location.
+}
+You can also open the app settings:
+
+if (await Permission.speech.isPermanentlyDenied) {
+  // The user opted to never again see the permission request dialog for this
+  // app. The only way to change the permission's status now is to let the
+  // user manually enables it in the system settings.
+  openAppSettings();
+}
+On Android, you can show a rationale for using permission:
+
+bool isShown = await Permission.contacts.shouldShowRequestRationale;
+Some permissions will not show a dialog asking the user to allow or deny the requested permission.
+This is because the OS setting(s) of the app are being retrieved for the corresponding permission.
+The status of the setting will determine whether the permission is granted or denied.
+
+The following permissions will show no dialog:
+
+Notification
+Bluetooth
+The following permissions will show no dialog, but will open the corresponding setting intent for the user to change the permission status:
+
+manageExternalStorage
+systemAlertWindow
+requestInstallPackages
+accessNotificationPolicy
+The locationAlways permission can not be requested directly, the user has to request the locationWhenInUse permission first. Accepting this permission by clicking on the 'Allow While Using App' gives the user the possibility to request the locationAlways permission. This will then bring up another permission popup asking you to Keep Only While Using or to Change To Always Allow.

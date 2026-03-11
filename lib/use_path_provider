@@ -1,0 +1,7 @@
+Example
+
+final Directory tempDir = await getTemporaryDirectory();
+
+final Directory appDocumentsDir = await getApplicationDocumentsDirectory();
+
+final Directory? downloadsDir = await getDownloadsDirectory();

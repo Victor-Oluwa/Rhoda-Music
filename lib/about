@@ -1,0 +1,39 @@
+We are going to build a **fully offline music player application called Rhoda Music**. The goal of this project is to demonstrate how to build a **high-performance, feature-rich Flutter application** using professional architecture, clean coding practices, and advanced media playback capabilities.
+
+The application will be built using **Clean Architecture**, separating the project into three clear layers: **presentation, domain, and data**. Each layer will have clearly defined responsibilities, ensuring the codebase remains maintainable, scalable, and easy to test as the application grows.
+
+For state management, the project will use **Bloc** to manage events and state transitions in a predictable and organized way. **Riverpod** will be used for dependency injection and service access throughout the application. This combination ensures loose coupling between components while maintaining a clear flow of data and logic.
+
+To improve reliability and error handling, the application will incorporate **fpdart**. Functional programming constructs such as `Either` will be used to manage success and failure states, allowing the application to handle asynchronous operations in a structured and expressive way.
+
+To ensure consistent behavior across different devices and screen sizes, **ScreenUtil** will be used to support responsive layout scaling.
+
+The application will use a **unified theme consisting of taupe and grey shades**. In addition, the project will include a **robust text theme class implemented with the Google Fonts package** to provide consistent typography throughout the application.
+
+Rhoda Music will operate as a **completely offline-first music player**, meaning the app will play music directly from files stored on the device without requiring any internet connection. The application will focus on efficient local playback and library management while maintaining a structured and scalable codebase.
+
+Instead of relying on a single plugin for music querying, the application will use a **modern modular audio stack** that provides better flexibility and long-term maintainability. Music playback will be powered by **just_audio**, which provides high-performance audio playback, playlist management, and gapless playback capabilities. Background playback, lock screen controls, and media session management will be handled through **audio_service**.
+
+To extract information from audio files stored on the device, the project will use **audio_metadata_reader**, which allows the application to read metadata such as song title, artist, album, duration, and artwork directly from the audio files. This approach provides full control over how the music library is indexed and managed.
+
+The application will scan the device for locally stored audio files, read their metadata, and build an internal music library that can be efficiently queried and organized. Local data management will handle indexing of songs, caching metadata, managing playlists, storing playback history, and maintaining user preferences.
+
+Rhoda Music will include a wide range of **advanced music playback and library management capabilities**, including:
+
+* Automatic **device music scanning** to detect locally stored audio files
+* Support for multiple audio formats including **MP3, WAV, FLAC, OGG, and AAC**
+* Library organization by **artists, albums, genres, folders, and playlists**
+* **Gapless playback** for seamless transitions between songs
+* A configurable **audio equalizer**
+* **Lyrics support**, including embedded and synchronized lyrics
+* **Playlist creation and management**
+* **Audio visualizers** that respond to the playing track
+* **Sleep timer** for scheduled playback stopping
+* **Playback history and most-played tracking**
+* **Tag editing capabilities** for modifying song metadata such as title, artist, album, and artwork
+* Advanced **search and filtering** across music libraries
+* **Playback speed control** and queue management for flexible listening sessions
+
+The project will also demonstrate efficient **local data handling**, including indexing music files, managing metadata, storing user preferences, maintaining playlists, caching album artwork, and managing playback queues.
+
+Overall, **Rhoda Music** will showcase how to build a **technically advanced offline music player in Flutter**, combining strong architectural principles, functional programming practices, and powerful local media management capabilities within a scalable and maintainable project structure.

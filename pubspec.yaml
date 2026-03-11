@@ -1,0 +1,47 @@
+name: rhoda_music
+description: "A new Flutter project."
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.10.7
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  google_fonts: ^6.1.0
+  flutter_screenutil: ^5.9.3
+  flutter_bloc: ^8.1.3
+  flutter_riverpod: ^2.4.9
+  fpdart: ^1.1.0
+  just_audio: ^0.10.5
+  audio_service: ^0.18.18
+  audio_metadata_reader: ^1.4.2
+  path_provider: ^2.1.5
+  permission_handler: ^12.0.1
+  video_player: ^2.11.0
+  sqflite: ^2.3.0
+  path: ^1.8.3
+  uuid: ^4.2.2
+  flutter_launcher_icons: ^0.14.4
+  equatable: ^2.0.5
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: true
+  image_path: "assets/images/app_icon.png"
+  min_sdk_android: 21
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/videos/
+    - assets/music/
+    - assets/images/
