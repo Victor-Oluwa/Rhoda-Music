@@ -1,11 +1,5 @@
-just_audio is a feature-rich audio player for Android, iOS, macOS, web, Linux and Windows.
-
-Platform Support — API Documentation — Tutorials — Background Audio — Community Support
-
-Screenshot with arrows pointing to features
-
 Quick synopsis
-import 'package:just_audio/just_audio.dart';
+import 'package:fepe_just_audio/just_audio.dart';
 
 final player = AudioPlayer();                   // Create a player
 final duration = await player.setUrl(           // Load a URL
@@ -13,16 +7,10 @@ final duration = await player.setUrl(           // Load a URL
 player.play();                                  // Play without waiting for completion
 await player.play();                            // Play while waiting for completion
 await player.pause();                           // Pause but remain ready to play
-await player.seek(Duration(seconds: 10));       // Jump to the 10 second position
+await player.seek(Duration(second: 10));        // Jump to the 10 second position
 await player.setSpeed(2.0);                     // Twice as fast
 await player.setVolume(0.5);                    // Half as loud
 await player.stop();                            // Stop and free resources
-Migrating to 0.10.x
-iOS: As of audio_session 0.2.x, you may remove the compile flag AUDIO_SESSION_MICROPHONE=0 as this is now the default.
-Instead of player.setAudioSource(ConcatenatingAudioSource(children: sources)) use player.setAudioSources(sources).
-Instead of LoopingAudioSource(child: source, count: N) use ...List.filled(N, source).
-Instead of listening to player.playbackEventStream.onError, listen to player.errorStream.
-If you would like to emulate the previous skip-on-error setting, use constructor parameter maxSkipsOnError: 6.
 Working with multiple players
 // Set up two players with different audio files
 final player1 = AudioPlayer(); await player1.setUrl(...);
@@ -55,16 +43,21 @@ await player.play(); await player.pause();
 await player.setClip(); // Clear clip region
 Working with gapless playlists
 // Define the playlist
-final playlist = <AudioSource>[
-  AudioSource.uri(Uri.parse('https://example.com/track1.mp3')),
-  AudioSource.uri(Uri.parse('https://example.com/track2.mp3')),
-  AudioSource.uri(Uri.parse('https://example.com/track3.mp3')),
-];
-// Load the playlist
-await player.setAudioSources(playlist, initialIndex: 0, initialPosition: Duration.zero,
-  useLazyPreparation: true,                    // Load each item just in time
-  shuffleOrder: DefaultShuffleOrder(),         // Customise the shuffle algorithm
+final playlist = ConcatenatingAudioSource(
+  // Start loading next item just before reaching it
+  useLazyPreparation: true,
+  // Customise the shuffle algorithm
+  shuffleOrder: DefaultShuffleOrder(),
+  // Specify the playlist items
+  children: [
+    AudioSource.uri(Uri.parse('https://example.com/track1.mp3')),
+    AudioSource.uri(Uri.parse('https://example.com/track2.mp3')),
+    AudioSource.uri(Uri.parse('https://example.com/track3.mp3')),
+  ],
 );
+
+// Load and play the playlist
+await player.setAudioSource(playlist, initialIndex: 0, initialPosition: Duration.zero);
 await player.seekToNext();                     // Skip to the next item
 await player.seekToPrevious();                 // Skip to the previous item
 await player.seek(Duration.zero, index: 2);    // Skip to the start of track3.mp3
@@ -72,23 +65,19 @@ await player.setLoopMode(LoopMode.all);        // Set playlist to loop (off|all|
 await player.setShuffleModeEnabled(true);      // Shuffle playlist order (true|false)
 
 // Update the playlist
-await player.addAudioSource(newChild1);
-await player.insertAudioSource(3, newChild2);
-await player.removeAudioSourceAt(3);
-await player.moveAudioSource(2, 1);
+await playlist.add(newChild1);
+await playlist.insert(3, newChild2);
+await playlist.removeAt(3);
 Working with headers
 // Setting the HTTP user agent
 final player = AudioPlayer(
   userAgent: 'myradioapp/1.0 (Linux;Android 11) https://myradioapp.com',
-  useProxyForRequestHeaders: true, // default
 );
 
 // Setting request headers
 final duration = await player.setUrl('https://foo.com/bar.mp3',
     headers: {'header1': 'value1', 'header2': 'value2'});
-Note: By default, headers are implemented via a local HTTP proxy which on Android, iOS and macOS requires non-HTTPS support to be enabled. See Platform Specific Configuration.
-
-Alternatively, settings useProxyForRequestHeaders: false will use the platform's native headers implementation without a proxy. Although note that iOS doesn't offer an official native API for setting headers, and so this will use the undocumented AVURLAssetHTTPHeaderFieldsKey API (or in the case of the user-agent header on iOS 16 and above, the official AVURLAssetHTTPUserAgentKey API).
+Note: headers are implemented via a local HTTP proxy which on Android, iOS and macOS requires non-HTTPS support to be enabled. See Platform Specific Configuration.
 
 Working with caches
 // Clear the asset cache directory
@@ -106,7 +95,7 @@ Working with stream audio sources
 class MyCustomSource extends StreamAudioSource {
   final List<int> bytes;
   MyCustomSource(this.bytes);
-
+  
   @override
   Future<StreamAudioResponse> request([int? start, int? end]) async {
     start ??= 0;
@@ -150,11 +139,14 @@ try {
   print('An error occured: $e');
 }
 
-// Listening to errors during playback (e.g. lost network connection)
-player.errorStream.listen((PlayerException e) {
-  print('Error code: ${e.code}');
-  print('Error message: ${e.message}');
-  print('AudioSource index: ${e.index}');
+// Catching errors during playback (e.g. lost network connection)
+player.playbackEventStream.listen((event) {}, onError: (Object e, StackTrace st) {
+  if (e is PlayerException) {
+    print('Error code: ${e.code}');
+    print('Error message: ${e.message}');
+  } else {
+    print('An error occurred: $e');
+  }
 });
 Working with state streams
 See The state model for details.
@@ -187,222 +179,16 @@ player.playerStateStream.listen((state) {
 // - playbackEventStream
 
 
-Readme
-Changelog
-Example
-Installing
-Versions
-Scores
-just_audio
-just_audio is a feature-rich audio player for Android, iOS, macOS, web, Linux and Windows.
 
-Platform Support — API Documentation — Tutorials — Background Audio — Community Support
-
-Screenshot with arrows pointing to features
-
-Quick synopsis
-import 'package:just_audio/just_audio.dart';
-
-final player = AudioPlayer();                   // Create a player
-final duration = await player.setUrl(           // Load a URL
-    'https://foo.com/bar.mp3');                 // Schemes: (https: | file: | asset: )
-player.play();                                  // Play without waiting for completion
-await player.play();                            // Play while waiting for completion
-await player.pause();                           // Pause but remain ready to play
-await player.seek(Duration(seconds: 10));       // Jump to the 10 second position
-await player.setSpeed(2.0);                     // Twice as fast
-await player.setVolume(0.5);                    // Half as loud
-await player.stop();                            // Stop and free resources
-Migrating to 0.10.x
-iOS: As of audio_session 0.2.x, you may remove the compile flag AUDIO_SESSION_MICROPHONE=0 as this is now the default.
-Instead of player.setAudioSource(ConcatenatingAudioSource(children: sources)) use player.setAudioSources(sources).
-Instead of LoopingAudioSource(child: source, count: N) use ...List.filled(N, source).
-Instead of listening to player.playbackEventStream.onError, listen to player.errorStream.
-If you would like to emulate the previous skip-on-error setting, use constructor parameter maxSkipsOnError: 6.
-Working with multiple players
-// Set up two players with different audio files
-final player1 = AudioPlayer(); await player1.setUrl(...);
-final player2 = AudioPlayer(); await player2.setUrl(...);
-
-// Play both at the same time
-player1.play();
-player2.play();
-
-// Play one after the other
-await player1.play();
-await player2.play();
-
-// Loop player1 until player2 finishes
-await player1.setLoopMode(LoopMode.one);
-player1.play();          // Don't wait
-await player2.play();    // Wait for player2 to finish
-await player1.pause();   // Finish player1
-
-// Free platform decoders and buffers for each player.
-await player1.stop();
-await player2.stop();
-Working with clips
-// Play clip 2-4 seconds followed by clip 10-12 seconds
-await player.setClip(start: Duration(seconds: 2), end: Duration(seconds: 4));
-await player.play(); await player.pause();
-await player.setClip(start: Duration(seconds: 10), end: Duration(seconds: 12));
-await player.play(); await player.pause();
-
-await player.setClip(); // Clear clip region
-Working with gapless playlists
-// Define the playlist
-final playlist = <AudioSource>[
-  AudioSource.uri(Uri.parse('https://example.com/track1.mp3')),
-  AudioSource.uri(Uri.parse('https://example.com/track2.mp3')),
-  AudioSource.uri(Uri.parse('https://example.com/track3.mp3')),
-];
-// Load the playlist
-await player.setAudioSources(playlist, initialIndex: 0, initialPosition: Duration.zero,
-  useLazyPreparation: true,                    // Load each item just in time
-  shuffleOrder: DefaultShuffleOrder(),         // Customise the shuffle algorithm
-);
-await player.seekToNext();                     // Skip to the next item
-await player.seekToPrevious();                 // Skip to the previous item
-await player.seek(Duration.zero, index: 2);    // Skip to the start of track3.mp3
-await player.setLoopMode(LoopMode.all);        // Set playlist to loop (off|all|one)
-await player.setShuffleModeEnabled(true);      // Shuffle playlist order (true|false)
-
-// Update the playlist
-await player.addAudioSource(newChild1);
-await player.insertAudioSource(3, newChild2);
-await player.removeAudioSourceAt(3);
-await player.moveAudioSource(2, 1);
-Working with headers
-// Setting the HTTP user agent
-final player = AudioPlayer(
-  userAgent: 'myradioapp/1.0 (Linux;Android 11) https://myradioapp.com',
-  useProxyForRequestHeaders: true, // default
-);
-
-// Setting request headers
-final duration = await player.setUrl('https://foo.com/bar.mp3',
-    headers: {'header1': 'value1', 'header2': 'value2'});
-Note: By default, headers are implemented via a local HTTP proxy which on Android, iOS and macOS requires non-HTTPS support to be enabled. See Platform Specific Configuration.
-
-Alternatively, settings useProxyForRequestHeaders: false will use the platform's native headers implementation without a proxy. Although note that iOS doesn't offer an official native API for setting headers, and so this will use the undocumented AVURLAssetHTTPHeaderFieldsKey API (or in the case of the user-agent header on iOS 16 and above, the official AVURLAssetHTTPUserAgentKey API).
-
-Working with caches
-// Clear the asset cache directory
-await AudioPlayer.clearAssetCache();
-
-// Download and cache audio while playing it (experimental)
-final audioSource = LockCachingAudioSource('https://foo.com/bar.mp3');
-await player.setAudioSource(audioSource);
-// Delete the cached file
-await audioSource.clearCache();
-Note: LockCachingAudioSource is implemented via a local HTTP proxy which on Android, iOS and macOS requires non-HTTPS support to be enabled. See Platform Specific Configuration.
-
-Working with stream audio sources
-// Feed your own stream of bytes into the player
-class MyCustomSource extends StreamAudioSource {
-  final List<int> bytes;
-  MyCustomSource(this.bytes);
-
-  @override
-  Future<StreamAudioResponse> request([int? start, int? end]) async {
-    start ??= 0;
-    end ??= bytes.length;
-    return StreamAudioResponse(
-      sourceLength: bytes.length,
-      contentLength: end - start,
-      offset: start,
-      stream: Stream.value(bytes.sublist(start, end)),
-      contentType: 'audio/mpeg',
-    );
-  }
-}
-
-await player.setAudioSource(MyCustomSource());
-player.play();
-Note: StreamAudioSource is implemented via a local HTTP proxy which on Android, iOS and macOS requires non-HTTPS support to be enabled. See Platform Specific Configuration.
-
-Working with errors
-// Catching errors at load time
-try {
-  await player.setUrl("https://s3.amazonaws.com/404-file.mp3");
-} on PlayerException catch (e) {
-  // iOS/macOS: maps to NSError.code
-  // Android: maps to ExoPlayerException.type
-  // Web: maps to MediaError.code
-  // Linux/Windows: maps to PlayerErrorCode.index
-  print("Error code: ${e.code}");
-  // iOS/macOS: maps to NSError.localizedDescription
-  // Android: maps to ExoPlaybackException.getMessage()
-  // Web/Linux: a generic message
-  // Windows: MediaPlayerError.message
-  print("Error message: ${e.message}");
-} on PlayerInterruptedException catch (e) {
-  // This call was interrupted since another audio source was loaded or the
-  // player was stopped or disposed before this audio source could complete
-  // loading.
-  print("Connection aborted: ${e.message}");
-} catch (e) {
-  // Fallback for all other errors
-  print('An error occured: $e');
-}
-
-// Listening to errors during playback (e.g. lost network connection)
-player.errorStream.listen((PlayerException e) {
-  print('Error code: ${e.code}');
-  print('Error message: ${e.message}');
-  print('AudioSource index: ${e.index}');
-});
-Working with state streams
-See The state model for details.
-
-player.playerStateStream.listen((state) {
-  if (state.playing) ... else ...
-  switch (state.processingState) {
-    case ProcessingState.idle: ...
-    case ProcessingState.loading: ...
-    case ProcessingState.buffering: ...
-    case ProcessingState.ready: ...
-    case ProcessingState.completed: ...
-  }
-});
-
-// See also:
-// - durationStream
-// - positionStream
-// - bufferedPositionStream
-// - sequenceStateStream
-// - sequenceStream
-// - currentIndexStream
-// - icyMetadataStream
-// - playingStream
-// - processingStateStream
-// - loopModeStream
-// - shuffleModeEnabledStream
-// - volumeStream
-// - speedStream
-// - playbackEventStream
-Credits
-This project is supported by the amazing open source community of GitHub contributors and sponsors. Thank you!
 
 Platform specific configuration
 Android
 To allow your application to access audio files on the Internet, add the following permission to your AndroidManifest.xml file:
 
     <uses-permission android:name="android.permission.INTERNET"/>
-If you wish to connect to non-HTTPS URLs (typically HTTP), also add the following attribute to the application element:
+If you wish to connect to non-HTTPS URLS, or if you use a feature that depends on the proxy such as headers, caching or stream audio sources, also add the following attribute to the application element:
 
     <application ... android:usesCleartextTraffic="true">
-Note that just_audio's proxy (used to implement features such as headers, caching and stream audio sources) runs on a localhost HTTP server, and this also requires cleartext access to be enabled. You can either enable this via the option above which also enables access to any non-HTTPS URL, or you can instead limit cleartext access to just localhost URLs by defining a network security config. To use this approach, create the file android/app/src/main/res/xml/network_security_config.xml:
-
-<?xml version="1.0" encoding="utf-8"?>
-<network-security-config>
-	<domain-config cleartextTrafficPermitted="true">
-		<domain includeSubdomains="false">127.0.0.1</domain>
-	</domain-config>
-</network-security-config>
-Then reference this network security config in your AndroidManifest.xml file by adding the following attribute to the application element:
-
-    <application ... android:networkSecurityConfig="@xml/network_security_config">
 If you need access to the player's AudioSession ID, you can listen to AudioPlayer.androidAudioSessionIdStream. Note that the AudioSession ID will change whenever you set new AudioAttributes.
 
 If there are multiple plugins in your app that use ExoPlayer to decode media, it is possible to encounter a Duplicate class error if those plugins use different versions of ExoPlayer. In this case you may report an issue for each respective plugin to upgrade to the latest version of ExoPlayer, or you may downgrade one or more of your app's plugins until the versions match. In some cases where a plugin uses non-breaking parts of the ExoPlayer API, you can also try forcing all plugins to use the same version of ExoPlayer by editing your own app's android/app/build.gradle file and inserting the dependencies for the desired Exoplayer version:
@@ -414,4 +200,3 @@ dependencies {
     implementation "com.google.android.exoplayer:exoplayer-hls:$exoplayer_version"
     implementation "com.google.android.exoplayer:exoplayer-smoothstreaming:$exoplayer_version"
 }
-Note: the Android Gradle Plugin (AGP) versions 8.6 and 8.7 contain a bug that affects ExoPlayer in release mode. To avoid this, either downgrade or upgrade your AGP version.

@@ -1,0 +1,261 @@
+Each one has a **different responsibility** in a Flutter audio app. Think of them as **layers that work together**, not competitors.
+
+---
+
+# 1. `just_audio`
+
+**Main job:** Actual audio playback engine.
+
+It is the plugin that **plays the sound**.
+
+### What it does
+
+* Play audio files
+* Pause / resume
+* Seek forward or backward
+* Play from URL or local file
+* Play playlists
+* Shuffle / repeat
+* Change speed
+* Stream audio
+* Give position updates
+
+Example:
+
+```dart
+final player = AudioPlayer();
+
+await player.setUrl("https://example.com/song.mp3");
+player.play();
+```
+
+### Streams it provides
+
+These streams let the UI react to playback.
+
+```dart
+player.positionStream
+player.playerStateStream
+player.durationStream
+player.bufferedPositionStream
+```
+
+Example use:
+
+* update progress bar
+* sync lyrics
+* show buffering
+
+### What it **does NOT do**
+
+* Background playback
+* Lock-screen controls
+* Notification controls
+* Headphone button handling
+
+That’s where the next plugin comes in.
+
+---
+
+# 2. `audio_service`
+
+**Main job:** Run your audio player in the background and connect it to the OS media system.
+
+It turns your app into a **real media app**.
+
+### What it enables
+
+#### Background playback
+
+Music keeps playing even if:
+
+* user leaves the app
+* screen locks
+* another app opens
+
+#### Media notification
+
+On Android you get a **media player notification**.
+
+Example controls:
+
+* play
+* pause
+* next
+* previous
+
+#### Lock screen controls
+
+Control music without opening the app.
+
+#### Headphone buttons
+
+Play/pause from headset buttons.
+
+#### Android Auto / CarPlay support
+
+#### OS media integration
+
+Android and iOS can communicate with your player.
+
+### How it works
+
+Instead of controlling `just_audio` directly, you create an **AudioHandler**.
+
+Example concept:
+
+```dart
+class MyAudioHandler extends BaseAudioHandler {
+  final player = AudioPlayer();
+}
+```
+
+Your UI sends commands to the handler.
+
+```dart
+audioHandler.play();
+audioHandler.pause();
+```
+
+---
+
+# 3. `audio_session`
+
+**Main job:** Manage how your audio interacts with other apps.
+
+Phones only allow **one audio focus at a time**.
+
+`audio_session` handles this politely.
+
+### What it controls
+
+#### Audio focus
+
+Example situations:
+
+| Situation                | Result                      |
+| ------------------------ | --------------------------- |
+| Phone call comes in      | music pauses                |
+| Navigation app speaks    | music ducks (volume lowers) |
+| Another music app starts | your player stops           |
+
+#### Audio type configuration
+
+Example:
+
+```dart
+final session = await AudioSession.instance;
+await session.configure(AudioSessionConfiguration.music());
+```
+
+This tells the OS:
+
+> "This app plays music."
+
+Other modes exist:
+
+* speech
+* movie
+* game
+* navigation
+
+### What it also manages
+
+* Bluetooth devices
+* headphones
+* interruptions
+* audio routing
+
+Without this plugin, audio behavior can be **messy across apps**.
+
+---
+
+# 4. `rxdart`
+
+**Main job:** Advanced stream processing.
+
+Flutter audio apps produce **lots of streams**:
+
+* position
+* duration
+* buffering
+* playing state
+* playlist
+* current song
+
+`rxdart` helps **combine them into clean UI streams**.
+
+### Example problem
+
+You want one stream that contains:
+
+* current position
+* total duration
+* buffered position
+
+Without RxDart this is messy.
+
+### With RxDart
+
+```dart
+Rx.combineLatest3(
+  player.positionStream,
+  player.bufferedPositionStream,
+  player.durationStream,
+  (position, buffered, duration) =>
+      PositionData(position, buffered, duration),
+);
+```
+
+Now your UI listens to **one stream**.
+
+### What RxDart provides
+
+* combine streams
+* transform streams
+* debounce
+* throttle
+* merge
+* behavior subjects
+
+It makes **reactive audio UI much easier**.
+
+---
+
+# How they work together
+
+```
+UI (Flutter widgets)
+       ↓
+Riverpod / Bloc
+       ↓
+audio_service (background control)
+       ↓
+just_audio (playback engine)
+       ↓
+audio_session (OS audio focus)
+```
+
+`rxdart` sits **beside everything** to manage streams.
+
+---
+
+# Simple real-world analogy
+
+Imagine a **concert**.
+
+| Tool          | Role                                             |
+| ------------- | ------------------------------------------------ |
+| just_audio    | The musician playing the music                   |
+| audio_service | The stage manager running the show               |
+| audio_session | The venue manager coordinating with other events |
+| rxdart        | The mixing console combining signals             |
+
+
+Stack:
+
+```
+just_audio
+audio_service
+audio_session
+rxdart

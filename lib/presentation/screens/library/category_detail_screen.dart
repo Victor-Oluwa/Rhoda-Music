@@ -13,10 +13,11 @@ import '../../providers/audio_providers.dart';
 import '../../providers/bloc_providers.dart';
 import '../../widgets/background_painter.dart';
 import '../player/player_screen.dart';
+import '../home/home_screen.dart';
 
 class CategoryDetailScreen extends ConsumerWidget {
   final String title;
-  final List<Song> songs; // Initial songs
+  final List<Song> songs; 
   final String type;
   final String? playlistId;
 
@@ -41,23 +42,32 @@ class CategoryDetailScreen extends ConsumerWidget {
           builder: (context, scannerState) {
             List<Song> displayedSongs = songs;
 
-            // Reactively update songs if it's a special category
             if (scannerState is MusicScannerSuccess && playlistState is PlaylistSuccess) {
               if (type == "FAVORITES") {
                 displayedSongs = scannerState.songs
                     .where((s) => playlistState.favouriteSongPaths.contains(s.id))
                     .toList();
+                
+                // Also check assets
+                final assetSongs = _getAssetSongs();
+                for (var s in assetSongs) {
+                  if (playlistState.favouriteSongPaths.contains(s.id)) {
+                    displayedSongs.add(s);
+                  }
+                }
               } else if (type == "RECENT") {
                 displayedSongs = [];
+                final allPossibleSongs = [...scannerState.songs, ..._getAssetSongs()];
                 for (var path in playlistState.recentSongPaths) {
                   try {
-                    final song = scannerState.songs.firstWhere((s) => s.id == path);
+                    final song = allPossibleSongs.firstWhere((s) => s.id == path);
                     displayedSongs.add(song);
                   } catch (_) {}
                 }
               } else if (type == "PLAYLIST" && playlistId != null) {
                 final playlist = playlistState.playlists.firstWhere((p) => p.id == playlistId, orElse: () => playlistState.playlists.first);
-                displayedSongs = scannerState.songs
+                final allPossibleSongs = [...scannerState.songs, ..._getAssetSongs()];
+                displayedSongs = allPossibleSongs
                     .where((s) => playlist.songPaths.contains(s.id))
                     .toList();
               }
@@ -85,7 +95,11 @@ class CategoryDetailScreen extends ConsumerWidget {
                                   itemCount: displayedSongs.length,
                                   itemBuilder: (context, index) {
                                     final song = displayedSongs[index];
-                                    return _buildSongTile(context, ref, song, index, displayedSongs);
+                                    return SongTile(
+                                      song: song, 
+                                      songs: displayedSongs, 
+                                      index: index,
+                                    );
                                   },
                                 ),
                         ),
@@ -101,16 +115,37 @@ class CategoryDetailScreen extends ConsumerWidget {
     );
   }
 
+  List<Song> _getAssetSongs() {
+    return [
+      const Song(
+        id: 'asset:///assets/music/victor_track.mp3',
+        title: 'Remember',
+        artist: 'Victor Special',
+        album: 'Asset Collection',
+        duration: Duration(seconds: 33),
+        path: 'asset:///assets/music/victor_track.mp3',
+      ),
+      const Song(
+        id: 'asset:///assets/music/today_denver.mp3',
+        title: 'Today',
+        artist: 'Victor Special',
+        album: 'Asset Collection',
+        duration: Duration(seconds: 228),
+        path: 'asset:///assets/music/today_denver.mp3',
+      ),
+    ];
+  }
+
   Widget _buildEmptyState() {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.music_note_outlined, size: 64.sp, color: AppColors.greyBase.withValues(alpha: 0.2)),
+          Icon(Icons.music_note_outlined, size: 64.sp, color: AppColors.greyBase.withOpacity(0.2)),
           SizedBox(height: 16.h),
           Text(
             "No tracks in this category",
-            style: TextStyle(color: AppColors.greyBase.withValues(alpha: 0.5), fontSize: 14.sp),
+            style: TextStyle(color: AppColors.greyBase.withOpacity(0.5), fontSize: 14.sp),
           ),
         ],
       ),
@@ -152,7 +187,7 @@ class CategoryDetailScreen extends ConsumerWidget {
               borderRadius: BorderRadius.circular(20.r),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.2),
+                  color: Colors.black.withOpacity(0.2),
                   blurRadius: 10,
                   offset: const Offset(0, 5),
                 ),
@@ -200,46 +235,6 @@ class CategoryDetailScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildSongTile(BuildContext context, WidgetRef ref, Song song, int index, List<Song> allSongs) {
-    return Container(
-      margin: EdgeInsets.only(bottom: 12.h),
-      decoration: BoxDecoration(
-        color: AppColors.surface.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(16.r),
-      ),
-      child: ListTile(
-        onTap: () async {
-          final handler = ref.read(audioHandlerProvider) as RhodaAudioHandler;
-          await handler.setQueueAndPlay(allSongs.map((s) => s.toMediaItem()).toList(), index);
-          if (context.mounted) {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const PlayerScreen()),
-            );
-          }
-        },
-        contentPadding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 4.h),
-        leading: Text(
-          (index + 1).toString().padLeft(2, '0'),
-          style: TextStyle(color: AppColors.greyBase.withValues(alpha: 0.5), fontWeight: FontWeight.bold),
-        ),
-        title: Text(
-          song.title,
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-        subtitle: Text(
-          song.artist,
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.greyBase),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-        trailing: const Icon(Icons.more_vert_rounded, color: AppColors.greyBase),
-      ),
-    );
-  }
-
   IconData _getIcon() {
     switch (type.toUpperCase()) {
       case 'ARTIST': return Icons.person_rounded;
@@ -249,6 +244,7 @@ class CategoryDetailScreen extends ConsumerWidget {
       case 'PLAYLIST': return Icons.playlist_play_rounded;
       case 'FAVORITES': return Icons.favorite_rounded;
       case 'RECENT': return Icons.history_rounded;
+      case 'FEATURED': return Icons.auto_awesome_rounded;
       default: return Icons.music_note_rounded;
     }
   }

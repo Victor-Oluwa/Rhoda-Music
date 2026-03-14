@@ -7,63 +7,63 @@ class BackgroundPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final paint = Paint()..style = PaintingStyle.fill;
 
-    // Background base
-    final basePaint = Paint()
-      ..shader = LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [
-          AppColors.background,
-          const Color(0xFF1A1A1A),
-        ],
-      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
-    canvas.drawRect(Rect.fromLTWH(0, 0, size.width, size.height), basePaint);
+    // Background base - using solid background as requested "no gradient" for structure
+    // but a very subtle deep variation for the painter itself to feel "elegant"
+    canvas.drawRect(Rect.fromLTWH(0, 0, size.width, size.height), 
+        Paint()..color = AppColors.background);
 
-    // Decorative shape 1 - Top Left
+    // Decorative shape 1 - Soft Top Left Organic Shape
     final path1 = Path()
-      ..moveTo(0, size.height * 0.4)
+      ..moveTo(0, size.height * 0.3)
       ..quadraticBezierTo(
-        size.width * 0.3,
-        size.height * 0.2,
-        size.width * 0.8,
+        size.width * 0.2,
+        size.height * 0.15,
+        size.width * 0.6,
         0,
       )
       ..lineTo(0, 0)
       ..close();
     canvas.drawPath(
       path1,
-      paint..color = AppColors.taupeDark.withOpacity(0.08),
+      paint..color = AppColors.taupeDark.withOpacity(0.04),
     );
 
-    // Decorative shape 2 - Bottom Right
+    // Decorative shape 2 - Soft Bottom Right Organic Shape
     final path2 = Path()
-      ..moveTo(size.width, size.height * 0.5)
+      ..moveTo(size.width, size.height * 0.6)
       ..quadraticBezierTo(
-        size.width * 0.6,
-        size.height * 0.85,
-        size.width * 0.1,
+        size.width * 0.7,
+        size.height * 0.8,
+        size.width * 0.3,
         size.height,
       )
       ..lineTo(size.width, size.height)
       ..close();
     canvas.drawPath(
       path2,
-      paint..color = AppColors.taupeBase.withOpacity(0.06),
+      paint..color = AppColors.primary.withOpacity(0.03),
     );
 
-    // Modern Glassmorphism Orbs
-    _drawOrb(canvas, Offset(size.width * 0.85, size.height * 0.15), 140, 
-        AppColors.taupeLight.withOpacity(0.04));
-    _drawOrb(canvas, Offset(size.width * 0.05, size.height * 0.9), 220, 
-        AppColors.primary.withOpacity(0.03));
-    _drawOrb(canvas, Offset(size.width * 0.6, size.height * 0.5), 110, 
-        AppColors.greyBase.withOpacity(0.02));
+    // Elegant thin line accents
+    final linePaint = Paint()
+      ..color = Colors.white.withOpacity(0.02)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.0;
+
+    canvas.drawCircle(Offset(size.width, 0), size.width * 0.4, linePaint);
+    canvas.drawCircle(Offset(0, size.height), size.width * 0.6, linePaint);
+    
+    // Modern Soft Orbs for depth
+    _drawOrb(canvas, Offset(size.width * 0.8, size.height * 0.2), 120, 
+        AppColors.taupeLight.withOpacity(0.03));
+    _drawOrb(canvas, Offset(size.width * 0.1, size.height * 0.8), 180, 
+        AppColors.primary.withOpacity(0.02));
   }
 
   void _drawOrb(Canvas canvas, Offset center, double radius, Color color) {
     final paint = Paint()
       ..color = color
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 70);
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 80);
     canvas.drawCircle(center, radius, paint);
   }
 

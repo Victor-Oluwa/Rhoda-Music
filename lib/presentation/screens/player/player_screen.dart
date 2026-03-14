@@ -1,11 +1,15 @@
-import 'dart:math' as math;
-import 'dart:typed_data';
+import 'dart:io';
 import 'dart:ui';
 import 'package:audio_service/audio_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as p;
 import '../../../core/audio/audio_handler.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../bloc/playlist/playlist_bloc.dart';
@@ -14,7 +18,9 @@ import '../../bloc/playlist/playlist_state.dart';
 import '../../providers/audio_providers.dart';
 import '../../providers/bloc_providers.dart';
 import '../../widgets/equalizer_sheet.dart';
-import '../../widgets/video_background.dart';
+import '../../widgets/video_background.dart'; 
+import '../../widgets/stunning_progress_bar.dart';
+import '../../widgets/stunning_visualizer.dart';
 
 class PlayerScreen extends ConsumerStatefulWidget {
   const PlayerScreen({super.key});
@@ -23,23 +29,76 @@ class PlayerScreen extends ConsumerStatefulWidget {
   ConsumerState<PlayerScreen> createState() => _PlayerScreenState();
 }
 
-class _PlayerScreenState extends ConsumerState<PlayerScreen> with SingleTickerProviderStateMixin {
-  late AnimationController _visualizerController;
+class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   String? _lastTrackPath;
+  bool _showVideoBackground = true;
+  String? _customMediaPath;
+  static const String _mediaPathKey = 'custom_background_media_path';
 
   @override
   void initState() {
     super.initState();
-    _visualizerController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1500),
-    );
+    _loadCustomMedia();
   }
 
-  @override
-  void dispose() {
-    _visualizerController.dispose();
-    super.dispose();
+  Future<void> _loadCustomMedia() async {
+    final prefs = await SharedPreferences.getInstance();
+    String? savedPath = prefs.getString(_mediaPathKey);
+    
+    if (savedPath != null) {
+      if (!File(savedPath).existsSync()) {
+        await prefs.remove(_mediaPathKey);
+        savedPath = null;
+      }
+    }
+
+    if (mounted) {
+      setState(() {
+        _customMediaPath = savedPath;
+      });
+    }
+  }
+
+  Future<void> _pickMedia() async {
+    final picker = ImagePicker();
+    final XFile? media = await picker.pickMedia();
+    
+    if (media != null && mounted) {
+      try {
+        final appDir = await getApplicationDocumentsDirectory();
+        final fileName = 'bg_media_${DateTime.now().millisecondsSinceEpoch}${p.extension(media.path)}';
+        final savedFile = await File(media.path).copy(p.join(appDir.path, fileName));
+
+        final prefs = await SharedPreferences.getInstance();
+        if (_customMediaPath != null) {
+          final oldFile = File(_customMediaPath!);
+          if (oldFile.existsSync()) await oldFile.delete();
+        }
+
+        await prefs.setString(_mediaPathKey, savedFile.path);
+        setState(() {
+          _customMediaPath = savedFile.path;
+          _showVideoBackground = true;
+        });
+      } catch (e) {
+        debugPrint("Error saving picked media: $e");
+      }
+    }
+  }
+
+  Future<void> _resetToDefault() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (_customMediaPath != null) {
+      final file = File(_customMediaPath!);
+      if (file.existsSync()) await file.delete();
+    }
+    await prefs.remove(_mediaPathKey);
+    if (mounted) {
+      setState(() {
+        _customMediaPath = null;
+        _showVideoBackground = true;
+      });
+    }
   }
 
   @override
@@ -48,8 +107,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with SingleTickerPr
     final playbackState = ref.watch(playbackStateProvider).value;
     final handler = ref.watch(audioHandlerProvider);
     final playlistBloc = ref.watch(playlistBlocProvider);
+    final positionData = ref.watch(positionDataProvider).value;
 
-    // Side effect: Add to recent when track changes llllllllll
     ref.listen(currentSongProvider, (previous, next) {
       final song = next.value;
       if (song != null && song.id != _lastTrackPath) {
@@ -66,23 +125,30 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with SingleTickerPr
     final repeatMode = playbackState?.repeatMode ?? AudioServiceRepeatMode.none;
     final shuffleMode = playbackState?.shuffleMode ?? AudioServiceShuffleMode.none;
 
-    if (playing) {
-      if (!_visualizerController.isAnimating) {
-        _visualizerController.repeat();
-      }
-    } else {
-      _visualizerController.stop();
-    }
-
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
         children: [
-          const Positioned.fill(
-            child: VideoBackground(
-              assetPath: 'assets/videos/background_video.mp4',
+          // Background Layer
+          Positioned.fill(
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 500),
+              switchInCurve: Curves.easeInOut,
+              switchOutCurve: Curves.easeInOut,
+              child: _showVideoBackground
+                  ? MediaBackground(
+                      key: ValueKey(_customMediaPath ?? 'default_bg'),
+                      assetPath: _customMediaPath == null ? 'assets/videos/background_video.mp4' : null,
+                      filePath: _customMediaPath,
+                      showBlur: true,
+                    )
+                  : Container(
+                      key: const ValueKey('black_bg'),
+                      color: Colors.black,
+                    ),
             ),
           ),
+          
           Positioned.fill(
             child: Container(
               decoration: BoxDecoration(
@@ -99,29 +165,25 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with SingleTickerPr
               ),
             ),
           ),
-          Positioned.fill(
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
-              child: const SizedBox.expand(),
-            ),
-          ),
+
           SafeArea(
             child: Padding(
               padding: EdgeInsets.symmetric(horizontal: 24.w),
               child: Column(
                 children: [
+                  SizedBox(height: 8.h),
                   _buildHeader(context),
                   const Spacer(flex: 3),
                   _buildVisualizer(playing),
                   const Spacer(flex: 3),
                   _buildTrackInfo(context, currentItem),
-                  SizedBox(height: 30.h),
-                  _buildProgressBar(handler, currentItem),
-                  SizedBox(height: 20.h),
+                  const Spacer(flex: 1),
+                  _buildProgressBar(handler, positionData),
+                  SizedBox(height: 12.h),
                   _buildMainControls(context, handler, playing, repeatMode, shuffleMode),
                   const Spacer(flex: 4),
                   _buildBottomToolbar(context, playlistBloc, currentItem),
-                  SizedBox(height: 10.h),
+                  SizedBox(height: 12.h),
                 ],
               ),
             ),
@@ -133,77 +195,169 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with SingleTickerPr
 
   Widget _buildVisualizer(bool isPlaying) {
     return Center(
-      child: CustomPaint(
-        size: Size(300.w, 180.h),
-        painter: ModernVisualizerPainter(
-          animation: _visualizerController,
-          isPlaying: isPlaying,
-          color: AppColors.primary,
-        ),
+      child: StunningVisualizer(
+        isPlaying: isPlaying,
+        color: AppColors.primary,
       ),
     );
   }
 
   Widget _buildHeader(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.symmetric(vertical: 8.h),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          _buildGlassIconButton(
-            icon: Icons.keyboard_arrow_down_rounded,
-            onPressed: () => Navigator.pop(context),
-          ),
-          Column(
-            children: [
-              Text(
-                "NOW PLAYING",
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: Colors.white.withValues(alpha: 0.4),
-                  letterSpacing: 3.0,
-                  fontWeight: FontWeight.w800,
-                ),
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        _buildGlassIconButton(
+          icon: Icons.keyboard_arrow_down_rounded,
+          onPressed: () => Navigator.pop(context),
+        ),
+        Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              "NOW PLAYING",
+              style: GoogleFonts.lexendDeca(
+                color: Colors.white.withValues(alpha: 0.4),
+                letterSpacing: 4.0,
+                fontSize: 10.sp,
+                fontWeight: FontWeight.w600,
               ),
-              SizedBox(height: 2.h),
-              Text(
-                "Rhoda Music",
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w900,
-                ),
+            ),
+            SizedBox(height: 4.h),
+            Text(
+              "Rhoda Music",
+              style: GoogleFonts.lexendDeca(
+                color: Colors.white,
+                fontSize: 14.sp,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.5,
               ),
-            ],
-          ),
-          _buildGlassIconButton(
-            icon: Icons.graphic_eq_rounded,
-            onPressed: () {
-              showModalBottomSheet(
-                context: context,
-                isScrollControlled: true,
-                backgroundColor: Colors.transparent,
-                builder: (context) => const  EqualizerSheet(),
-              );
-            },
-          ),
-        ],
-      ),
+            ),
+          ],
+        ),
+        _buildGlassIconButton(
+          icon: _showVideoBackground ? Icons.movie_filter_rounded : Icons.movie_filter_outlined,
+          onPressed: () {
+            setState(() {
+              _showVideoBackground = !_showVideoBackground;
+            });
+          },
+          isActive: _showVideoBackground,
+        ),
+      ],
     );
   }
 
-  Widget _buildGlassIconButton({required IconData icon, required VoidCallback onPressed}) {
+  void _showBackgroundSettings(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return Container(
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(32.r)),
+          ),
+          padding: EdgeInsets.all(24.w),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40.w,
+                height: 4.h,
+                margin: EdgeInsets.only(bottom: 20.h),
+                decoration: BoxDecoration(
+                  color: Colors.white24,
+                  borderRadius: BorderRadius.circular(2.r),
+                ),
+              ),
+              Text(
+                "Background Style",
+                style: GoogleFonts.lexendDeca(
+                  color: Colors.white,
+                  fontSize: 20.sp,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              SizedBox(height: 24.h),
+              _buildSettingsOption(
+                icon: Icons.perm_media_rounded,
+                title: "Choose Custom Media",
+                subtitle: "Select an image or video from gallery",
+                onTap: () {
+                  Navigator.pop(context);
+                  _pickMedia();
+                },
+              ),
+              if (_customMediaPath != null)
+                _buildSettingsOption(
+                  icon: Icons.refresh_rounded,
+                  title: "Restore Default",
+                  subtitle: "Return to the original loop",
+                  onTap: () {
+                    Navigator.pop(context);
+                    _resetToDefault();
+                  },
+                ),
+              SizedBox(height: 12.h),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildSettingsOption({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return ListTile(
+      onTap: onTap,
+      contentPadding: EdgeInsets.symmetric(vertical: 8.h),
+      leading: Container(
+        padding: EdgeInsets.all(12.w),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.05),
+          borderRadius: BorderRadius.circular(16.r),
+        ),
+        child: Icon(icon, color: AppColors.primary),
+      ),
+      title: Text(title, style: GoogleFonts.lexendDeca(color: Colors.white, fontWeight: FontWeight.bold)),
+      subtitle: Text(subtitle, style: GoogleFonts.lexendDeca(color: Colors.white.withValues(alpha: 0.5), fontSize: 12.sp)),
+      trailing: const Icon(Icons.chevron_right_rounded, color: Colors.white24),
+    );
+  }
+
+  Widget _buildGlassIconButton({
+    required IconData icon, 
+    required VoidCallback onPressed,
+    bool isActive = false,
+  }) {
     return ClipRRect(
-      borderRadius: BorderRadius.circular(14.r),
+      borderRadius: BorderRadius.circular(16.r),
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-        child: Container(
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 300),
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.08),
-            borderRadius: BorderRadius.circular(14.r),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+            color: isActive 
+                ? AppColors.primary.withValues(alpha: 0.2) 
+                : Colors.white.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(16.r),
+            border: Border.all(
+              color: isActive 
+                  ? AppColors.primary.withValues(alpha: 0.5) 
+                  : Colors.white.withValues(alpha: 0.1),
+            ),
           ),
           child: IconButton(
             onPressed: onPressed,
-            icon: Icon(icon, color: Colors.white, size: 26.sp),
+            icon: Icon(
+              icon, 
+              color: isActive ? AppColors.primary : Colors.white, 
+              size: 24.sp,
+            ),
           ),
         ),
       ),
@@ -215,23 +369,24 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with SingleTickerPr
       children: [
         Text(
           item.title,
-          style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-            fontWeight: FontWeight.w900,
+          style: GoogleFonts.lexendDeca(
+            fontWeight: FontWeight.w800,
             color: Colors.white,
-            fontSize: 24.sp,
+            fontSize: 26.sp,
             letterSpacing: -0.5,
           ),
           textAlign: TextAlign.center,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
-        SizedBox(height: 8.h),
+        SizedBox(height: 10.h),
         Text(
           item.artist?.toUpperCase() ?? "UNKNOWN ARTIST",
-          style: Theme.of(context).textTheme.titleSmall?.copyWith(
+          style: GoogleFonts.lexendDeca(
             color: AppColors.primary,
-            fontWeight: FontWeight.bold,
-            letterSpacing: 2.0,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 3.0,
+            fontSize: 11.sp,
           ),
           textAlign: TextAlign.center,
         ),
@@ -239,47 +394,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with SingleTickerPr
     );
   }
 
-  Widget _buildProgressBar(AudioHandler handler, MediaItem item) {
-    return StreamBuilder<Duration>(
-      stream: AudioService.position,
-      builder: (context, snapshot) {
-        final position = snapshot.data ?? Duration.zero;
-        final duration = item.duration ?? Duration.zero;
-
-        return Column(
-          children: [
-            SliderTheme(
-              data: SliderTheme.of(context).copyWith(
-                trackHeight: 2.5.h,
-                thumbShape: RoundSliderThumbShape(enabledThumbRadius: 6.r, elevation: 6),
-                overlayShape: RoundSliderOverlayShape(overlayRadius: 14.r),
-                activeTrackColor: Colors.white,
-                inactiveTrackColor: Colors.white.withValues(alpha: 0.15),
-                thumbColor: Colors.white,
-                trackShape: const RectangularSliderTrackShape(),
-              ),
-              child: Slider(
-                min: 0.0,
-                max: duration.inMilliseconds.toDouble(),
-                value: position.inMilliseconds.toDouble().clamp(0.0, duration.inMilliseconds.toDouble()),
-                onChanged: (value) {
-                  handler.seek(Duration(milliseconds: value.toInt()));
-                },
-              ),
-            ),
-            Padding(
-              padding: EdgeInsets.symmetric(horizontal: 22.w),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(_formatDuration(position), style: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 10.sp, fontWeight: FontWeight.w600)),
-                  Text(_formatDuration(duration), style: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 10.sp, fontWeight: FontWeight.w600)),
-                ],
-              ),
-            ),
-          ],
-        );
-      },
+  Widget _buildProgressBar(AudioHandler handler, PositionData? positionData) {
+    return StunningProgressBar(
+      position: positionData?.position ?? Duration.zero,
+      bufferedPosition: positionData?.bufferedPosition ?? Duration.zero,
+      duration: positionData?.duration ?? Duration.zero,
+      onSeek: (duration) => handler.seek(duration),
     );
   }
 
@@ -290,12 +410,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with SingleTickerPr
         _buildShuffleButton(handler, shuffleMode),
         IconButton(
           onPressed: () => handler.skipToPrevious(),
-          icon: Icon(Icons.skip_previous_rounded, size: 50.sp, color: Colors.white),
+          icon: Icon(Icons.skip_previous_rounded, size: 48.sp, color: Colors.white),
         ),
         _buildPlayPauseButton(handler, playing),
         IconButton(
           onPressed: () => handler.skipToNext(),
-          icon: Icon(Icons.skip_next_rounded, size: 50.sp, color: Colors.white),
+          icon: Icon(Icons.skip_next_rounded, size: 48.sp, color: Colors.white),
         ),
         _buildRepeatButton(handler, repeatMode),
       ],
@@ -310,8 +430,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with SingleTickerPr
       },
       icon: Icon(
         Icons.shuffle_rounded,
-        color: isEnabled ? AppColors.primary : Colors.white.withValues(alpha: 0.4),
-        size: 24.sp,
+        color: isEnabled ? AppColors.primary : Colors.white.withValues(alpha: 0.3),
+        size: 22.sp,
       ),
     );
   }
@@ -322,7 +442,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with SingleTickerPr
     switch (repeatMode) {
       case AudioServiceRepeatMode.none:
         icon = Icons.repeat_rounded;
-        color = Colors.white.withValues(alpha: 0.4);
+        color = Colors.white.withValues(alpha: 0.3);
         break;
       case AudioServiceRepeatMode.one:
         icon = Icons.repeat_one_rounded;
@@ -340,7 +460,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with SingleTickerPr
         final nextMode = _getNextRepeatMode(repeatMode);
         handler.setRepeatMode(nextMode);
       },
-      icon: Icon(icon, color: color, size: 24.sp),
+      icon: Icon(icon, color: color, size: 22.sp),
     );
   }
 
@@ -364,15 +484,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with SingleTickerPr
           color: Colors.white,
           boxShadow: [
             BoxShadow(
-              color: Colors.white.withValues(alpha: 0.25),
-              blurRadius: 35,
-              spreadRadius: 1,
+              color: Colors.white.withValues(alpha: 0.2),
+              blurRadius: 40,
+              spreadRadius: 2,
             ),
           ],
         ),
         child: Icon(
           isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
-          size: 55.sp,
+          size: 52.sp,
           color: Colors.black,
         ),
       ),
@@ -381,10 +501,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with SingleTickerPr
 
   Widget _buildBottomToolbar(BuildContext context, PlaylistBloc playlistBloc, MediaItem item) {
     return Container(
-      padding: EdgeInsets.symmetric(vertical: 12.h, horizontal: 20.w),
+      padding: EdgeInsets.symmetric(vertical: 12.h, horizontal: 24.w),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.04),
-        borderRadius: BorderRadius.circular(28.r),
+        borderRadius: BorderRadius.circular(32.r),
         border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
       ),
       child: Row(
@@ -403,13 +523,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with SingleTickerPr
                 label: "LIKE",
                 onPressed: () {
                   playlistBloc.add(ToggleFavouriteEvent(item.id));
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(isLiked ? "Removed from Favorites" : "Added to Favorites"),
-                      duration: const Duration(seconds: 1),
-                      backgroundColor: AppColors.primary,
-                    ),
-                  );
                 },
               );
             },
@@ -419,8 +532,23 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with SingleTickerPr
             label: "ADD", 
             onPressed: () => _showPlaylistSelector(context, playlistBloc, item.id),
           ),
-          _ToolbarButton(icon: Icons.share_rounded, label: "SHARE", onPressed: () {}),
-          _ToolbarButton(icon: Icons.lyrics_rounded, label: "LYRICS", onPressed: () {}),
+          _ToolbarButton(
+            icon: Icons.wallpaper_rounded, 
+            label: "BG", 
+            onPressed: () => _showBackgroundSettings(context),
+          ),
+          _ToolbarButton(
+            icon: Icons.graphic_eq_rounded, 
+            label: "EQ", 
+            onPressed: () {
+              showModalBottomSheet(
+                context: context,
+                isScrollControlled: true,
+                backgroundColor: Colors.transparent,
+                builder: (context) => const EqualizerSheet(),
+              );
+            },
+          ),
         ],
       ),
     );
@@ -430,7 +558,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with SingleTickerPr
     showModalBottomSheet(
       context: context,
       backgroundColor: AppColors.surface,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(25.r))),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(32.r))),
       builder: (sheetContext) {
         return BlocBuilder<PlaylistBloc, PlaylistState>(
           bloc: playlistBloc,
@@ -445,10 +573,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with SingleTickerPr
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text("Add to Playlist", style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
+                  Text("Add to Playlist", style: GoogleFonts.lexendDeca(fontSize: 20.sp, fontWeight: FontWeight.bold, color: Colors.white)),
                   SizedBox(height: 20.h),
                   if (state.playlists.isEmpty)
-                    Center(child: Text("No playlists created yet", style: TextStyle(color: AppColors.greyBase.withValues(alpha: 0.5))))
+                    Center(child: Text("No playlists created yet", style: TextStyle(color: Colors.white.withValues(alpha: 0.3))))
                   else
                     Flexible(
                       child: ListView.builder(
@@ -462,7 +590,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with SingleTickerPr
                               padding: EdgeInsets.all(8.w),
                               decoration: BoxDecoration(
                                 color: AppColors.taupeDark.withValues(alpha: 0.2),
-                                borderRadius: BorderRadius.circular(10.r),
+                                borderRadius: BorderRadius.circular(12.r),
                               ),
                               child: const Icon(Icons.playlist_add_rounded, color: AppColors.taupeLight),
                             ),
@@ -471,12 +599,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with SingleTickerPr
                             onTap: () {
                               playlistBloc.add(AddSongToPlaylistEvent(p.id, songPath));
                               Navigator.pop(sheetContext);
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  backgroundColor: AppColors.primary,
-                                  content: Text("Added to ${p.name}", style: const TextStyle(color: Colors.white)),
-                                ),
-                              );
                             },
                           );
                         },
@@ -491,75 +613,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with SingleTickerPr
       },
     );
   }
-
-  String _formatDuration(Duration duration) {
-    String twoDigits(int n) => n.toString().padLeft(2, "0");
-    return "${twoDigits(duration.inMinutes.remainder(60))}:${twoDigits(duration.inSeconds.remainder(60))}";
-  }
-}
-
-class ModernVisualizerPainter extends CustomPainter {
-  final Animation<double> animation;
-  final bool isPlaying;
-  final Color color;
-
-  ModernVisualizerPainter({
-    required this.animation,
-    required this.isPlaying,
-    required this.color,
-  }) : super(repaint: animation);
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color.withValues(alpha: 0.7)
-      ..style = PaintingStyle.fill;
-
-    final barWidth = 4.w;
-    final spacing = 6.w;
-    final barCount = (size.width / (barWidth + spacing)).floor();
-    
-    final random = math.Random(42);
-
-    for (int i = 0; i < barCount; i++) {
-      double heightFactor;
-      if (isPlaying) {
-        final t = animation.value * 2 * math.pi;
-        final variance = random.nextDouble();
-        heightFactor = 0.2 + 0.8 * (math.sin(t + i * 0.4).abs() * variance);
-      } else {
-        heightFactor = 0.1;
-      }
-
-      final x = i * (barWidth + spacing);
-      final h = size.height * heightFactor;
-      final y = (size.height - h) / 2;
-
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(
-          Rect.fromLTWH(x, y, barWidth, h),
-          Radius.circular(barWidth / 2),
-        ),
-        paint,
-      );
-
-      if (isPlaying && heightFactor > 0.5) {
-        final glowPaint = Paint()
-          ..color = color.withValues(alpha: 0.2)
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
-        canvas.drawRRect(
-          RRect.fromRectAndRadius(
-            Rect.fromLTWH(x - 2, y - 2, barWidth + 4, h + 4),
-            Radius.circular(barWidth / 2 + 2),
-          ),
-          glowPaint,
-        );
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(ModernVisualizerPainter oldDelegate) => true;
 }
 
 class _ToolbarButton extends StatelessWidget {
@@ -578,10 +631,10 @@ class _ToolbarButton extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(icon, color: iconColor ?? Colors.white.withValues(alpha: 0.7), size: 22.sp),
-          SizedBox(height: 5.h),
+          SizedBox(height: 6.h),
           Text(
             label,
-            style: TextStyle(color: Colors.white.withValues(alpha: 0.3), fontSize: 9.sp, fontWeight: FontWeight.w800),
+            style: GoogleFonts.lexendDeca(color: Colors.white.withValues(alpha: 0.3), fontSize: 9.sp, fontWeight: FontWeight.w600, letterSpacing: 1.0),
           ),
         ],
       ),

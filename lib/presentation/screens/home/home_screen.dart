@@ -1,9 +1,9 @@
-import 'dart:typed_data';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../../../core/audio/audio_handler.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../bloc/music_library/music_library_bloc.dart';
@@ -64,6 +64,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
     super.dispose();
   }
 
+  String _getGreeting() {
+    final lagosTime = DateTime.now().toUtc().add(const Duration(hours: 1));
+    final hour = lagosTime.hour;
+
+    if (hour >= 0 && hour < 12) {
+      return "Good Morning";
+    } else if (hour >= 12 && hour < 17) {
+      return "Good Afternoon";
+    } else {
+      return "Good Evening";
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return MultiBlocProvider(
@@ -84,6 +97,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
             final bool isScanning = scannerState is MusicScannerLoading;
 
             return Scaffold(
+              backgroundColor: AppColors.background,
               resizeToAvoidBottomInset: false,
               body: Stack(
                 children: [
@@ -92,51 +106,70 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                       painter: BackgroundPainter(),
                     ),
                   ),
-                  IgnorePointer(
-                    ignoring: isScanning,
-                    child: AnimatedOpacity(
-                      duration: const Duration(milliseconds: 300),
-                      opacity: isScanning ? 0.6 : 1.0,
-                      child: SafeArea(
-                        bottom: false,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            _buildHeader(isScanning),
-                            _buildSearchBar(context),
-                            if (!_isSearchActive) ...[
-                              _buildQuickActions(),
-                              SizedBox(height: 20.h),
-                              _buildTabMenu(isScanning),
-                            ],
-                            Expanded(
-                              child: _isSearchActive
-                                  ? _SearchResultsView()
-                                  : TabBarView(
-                                      controller: _tabController,
-                                      physics: isScanning
-                                          ? const NeverScrollableScrollPhysics()
-                                          : const BouncingScrollPhysics(),
-                                      children: [
-                                        _SongsTabView(),
-                                        _PlaylistsTabView(),
-                                        _LibraryGroupView(groupType: LibraryGroupType.artist),
-                                        _LibraryGroupView(groupType: LibraryGroupType.album),
-                                        _LibraryGroupView(groupType: LibraryGroupType.genre),
-                                        _LibraryGroupView(groupType: LibraryGroupType.folder),
-                                      ],
+                  SafeArea(
+                    bottom: false,
+                    child: NestedScrollView(
+                      headerSliverBuilder: (context, innerBoxIsScrolled) {
+                        return [
+                          SliverToBoxAdapter(child: _buildHeader(isScanning)),
+                          SliverToBoxAdapter(child: _buildSearchBar(context, isScanning)),
+                          if (!_isSearchActive) ...[
+                            SliverToBoxAdapter(child: _buildQuickActions(isScanning)),
+                            SliverToBoxAdapter(child: SizedBox(height: 24.h)),
+                            SliverPersistentHeader(
+                              pinned: true,
+                              delegate: _TabPersistentHeaderDelegate(
+                                height: 54.h,
+                                child: Container(
+                                  color: AppColors.background.withOpacity(0.01),
+                                  alignment: Alignment.centerLeft,
+                                  child: ClipRRect(
+                                    child: BackdropFilter(
+                                      filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                                      child: Container(
+                                        color: AppColors.background.withOpacity(0.5),
+                                        child: _buildTabMenu(),
+                                      ),
                                     ),
+                                  ),
+                                ),
+                              ),
                             ),
                           ],
+                        ];
+                      },
+                      body: Container(
+                        decoration: BoxDecoration(
+                          color: AppColors.surface.withOpacity(0.2),
+                          borderRadius: BorderRadius.vertical(top: Radius.circular(32.r)),
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.vertical(top: Radius.circular(32.r)),
+                          child: _isSearchActive
+                              ? _SearchResultsView()
+                              : TabBarView(
+                                  controller: _tabController,
+                                  physics: isScanning
+                                      ? const NeverScrollableScrollPhysics()
+                                      : const BouncingScrollPhysics(),
+                                  children: [
+                                    _SongsTabView(),
+                                    _PlaylistsTabView(),
+                                    _LibraryGroupView(groupType: LibraryGroupType.artist),
+                                    _LibraryGroupView(groupType: LibraryGroupType.album),
+                                    _LibraryGroupView(groupType: LibraryGroupType.genre),
+                                    _LibraryGroupView(groupType: LibraryGroupType.folder),
+                                  ],
+                                ),
                         ),
                       ),
                     ),
                   ),
-                  Positioned(
+                  const Positioned(
                     left: 0,
                     right: 0,
                     bottom: 0,
-                    child: const MiniPlayer(),
+                    child: MiniPlayer(),
                   ),
                 ],
               ),
@@ -149,7 +182,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
 
   Widget _buildHeader(bool isScanning) {
     return Padding(
-      padding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 10.h),
+      padding: EdgeInsets.fromLTRB(24.w, 16.h, 24.w, 8.h),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -157,27 +190,27 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                "Welcome To",
-                style: TextStyle(
-                  color: AppColors.greyBase.withValues(alpha: 0.6),
-                  fontSize: 14.sp,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 0.5,
+                _getGreeting(),
+                style: GoogleFonts.lexendDeca(
+                  color: AppColors.greyBase.withOpacity(0.5),
+                  fontSize: 13.sp,
+                  fontWeight: FontWeight.w500,
+                  letterSpacing: 1.2,
                 ),
               ),
               Text(
-                "Rhoda Music",
-                style: TextStyle(
+                "R h o d a",
+                style: GoogleFonts.lexendDeca(
                   color: Colors.white,
-                  fontSize: 26.sp,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: -0.5,
+                  fontSize: 28.sp,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 2,
                 ),
               ),
             ],
           ),
           _buildCircleButton(
-            icon: isScanning ? Icons.hourglass_empty_rounded : Icons.refresh_rounded,
+            icon: isScanning ? Icons.sync : Icons.refresh_rounded,
             onPressed: isScanning ? () {} : () => _scannerBloc.add(ScanMusicEvent()),
           ),
         ],
@@ -185,7 +218,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
     );
   }
 
-  Widget _buildQuickActions() {
+  Widget _buildQuickActions(bool isScanning) {
     return BlocBuilder<PlaylistBloc, PlaylistState>(
       builder: (context, playlistState) {
         int favCount = 0;
@@ -201,9 +234,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
           if (scannerState is MusicScannerSuccess) {
             favSongs = scannerState.songs.where((s) => playlistState.favouriteSongPaths.contains(s.id)).toList();
             
+            final assetSongs = _getAssetSongs();
+            favSongs.addAll(assetSongs.where((s) => playlistState.favouriteSongPaths.contains(s.id)));
+
             for (var path in playlistState.recentSongPaths) {
               try {
-                final song = scannerState.songs.firstWhere((s) => s.id == path);
+                final allPossibleSongs = [...scannerState.songs, ...assetSongs];
+                final song = allPossibleSongs.firstWhere((s) => s.id == path);
                 recentSongs.add(song);
               } catch (_) {}
             }
@@ -211,22 +248,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
         }
 
         return Padding(
-          padding: EdgeInsets.only(top: 10.h),
-          child: SizedBox(
-            height: 120.h,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              padding: EdgeInsets.symmetric(horizontal: 24.w),
-              physics: const BouncingScrollPhysics(),
+          padding: EdgeInsets.only(top: 16.h),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: EdgeInsets.symmetric(horizontal: 24.w),
+            physics: const BouncingScrollPhysics(),
+            child: Row(
               children: [
-                _buildFeaturedCard(),
+                _buildFeaturedCard(isScanning),
                 SizedBox(width: 16.w),
                 _buildActionCard(
                   title: "Favorites",
                   subtitle: "$favCount tracks",
                   icon: Icons.favorite_rounded,
                   color: Colors.redAccent,
-                  onTap: () {
+                  onTap: isScanning ? () {} : () {
                     Navigator.push(context, MaterialPageRoute(builder: (context) => CategoryDetailScreen(
                       title: "Favorites",
                       songs: favSongs,
@@ -240,7 +276,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                   subtitle: "$recentCount tracks",
                   icon: Icons.history_rounded,
                   color: Colors.blueAccent,
-                  onTap: () {
+                  onTap: isScanning ? () {} : () {
                     Navigator.push(context, MaterialPageRoute(builder: (context) => CategoryDetailScreen(
                       title: "Recent Plays",
                       songs: recentSongs,
@@ -256,80 +292,102 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
     );
   }
 
-  Widget _buildFeaturedCard() {
+  List<Song> _getAssetSongs() {
+    return [
+      const Song(
+        id: 'asset:///assets/music/victor_track.mp3',
+        title: 'Remember',
+        artist: 'Victor Special',
+        album: 'Asset Collection',
+        duration: Duration(seconds: 33),
+        path: 'asset:///assets/music/victor_track.mp3',
+      ),
+      const Song(
+        id: 'asset:///assets/music/today_denver.mp3',
+        title: 'Today',
+        artist: 'Victor Special',
+        album: 'Asset Collection',
+        duration: Duration(seconds: 228),
+        path: 'asset:///assets/music/today_denver.mp3',
+      ),
+    ];
+  }
+
+  Widget _buildFeaturedCard(bool isScanning) {
     return GestureDetector(
-      onTap: () async {
-        final handler = ref.read(audioHandlerProvider) as RhodaAudioHandler;
-        final victorSong = const Song(
-          id: 'asset:///assets/music/victor_track.mp3',
-          title: 'Candle Light',
-          artist: 'Victor Special',
-          album: 'Asset Collection',
-          duration: Duration(seconds: 33),
-          path: 'asset:///assets/music/victor_track.mp3',
-        );
-        await handler.setQueueAndPlay([victorSong.toMediaItem()], 0);
-        if (mounted) {
-          Navigator.push(context, MaterialPageRoute(builder: (context) => const PlayerScreen()));
-        }
+      onTap: isScanning ? null : () {
+        Navigator.push(context, MaterialPageRoute(builder: (context) => CategoryDetailScreen(
+          title: "Victor Special",
+          songs: _getAssetSongs(),
+          type: "VICTOR SPECIAL",
+        )));
       },
-      child: Container(
-        width: 240.w,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(24.r),
-          gradient: LinearGradient(
-            colors: [
-              AppColors.primary,
-              AppColors.taupeDark.withValues(alpha: 0.8),
-            ],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
+      child: Opacity(
+        opacity: isScanning ? 0.6 : 1.0,
+        child: Container(
+          width: 260.w,
+          padding: EdgeInsets.all(24.w),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(32.r),
+            border: Border.all(color: AppColors.primary.withOpacity(0.15), width: 1.5),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                AppColors.primary.withOpacity(0.1),
+                Colors.transparent,
+              ],
+            ),
           ),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.primary.withValues(alpha: 0.3),
-              blurRadius: 20,
-              offset: const Offset(0, 10),
-            ),
-          ],
-        ),
-        child: Stack(
-          children: [
-            Positioned(
-              right: -20,
-              bottom: -20,
-              child: Icon(Icons.music_note_rounded, size: 120.sp, color: Colors.white.withValues(alpha: 0.1)),
-            ),
-            Padding(
-              padding: EdgeInsets.all(20.w),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Row(
                 children: [
                   Container(
-                    padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 4.h),
+                    padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 6.h),
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(20.r),
+                      color: AppColors.primary.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12.r),
+                      border: Border.all(color: AppColors.primary.withOpacity(0.3)),
                     ),
                     child: Text(
-                      "THE FOUNDATION",
-                      style: TextStyle(color: Colors.white, fontSize: 9.sp, fontWeight: FontWeight.bold, letterSpacing: 1),
+                      "FOR RHODA",
+                      style: GoogleFonts.lexendDeca(
+                        color: AppColors.primary, 
+                        fontSize: 9.sp, 
+                        fontWeight: FontWeight.w700, 
+                        letterSpacing: 1.5
+                      ),
                     ),
                   ),
-                  SizedBox(height: 10.h),
-                  Text(
-                    "VICTOR SPECIAL",
-                    style: TextStyle(color: Colors.white, fontSize: 18.sp, fontWeight: FontWeight.w900),
-                  ),
-                  Text(
-                    "CANDLE LIGHT",
-                    style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 12.sp),
-                  ),
+                  const Spacer(),
+                  Icon(Icons.auto_awesome_rounded, color: AppColors.primary.withOpacity(0.5), size: 20.sp),
                 ],
               ),
-            ),
-          ],
+              SizedBox(height: 20.h),
+              Text(
+                "VICTOR SPECIAL",
+                style: GoogleFonts.outfit(
+                  color: Colors.white, 
+                  fontSize: 22.sp, 
+                  fontWeight: FontWeight.w800, 
+                  letterSpacing: -0.5
+                ),
+              ),
+              SizedBox(height: 4.h),
+              Text(
+                "If your name is not Rhoda, you stole this app!",
+                style: GoogleFonts.lexendDeca(
+                  color: Colors.white.withOpacity(0.4), 
+                  fontSize: 12.sp, 
+                  fontWeight: FontWeight.w400
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -345,31 +403,32 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        width: 110.w,
+        width: 120.w,
+        padding: EdgeInsets.symmetric(vertical: 16.h),
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.05),
-          borderRadius: BorderRadius.circular(24.r),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(28.r),
+          border: Border.all(color: Colors.white.withOpacity(0.05)),
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              padding: EdgeInsets.all(12.w),
+              padding: EdgeInsets.all(10.w),
               decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.15),
+                color: color.withOpacity(0.1),
                 shape: BoxShape.circle,
               ),
-              child: Icon(icon, color: color, size: 24.sp),
+              child: Icon(icon, color: color, size: 22.sp),
             ),
             SizedBox(height: 12.h),
             Text(
               title,
-              style: TextStyle(color: Colors.white, fontSize: 12.sp, fontWeight: FontWeight.bold),
+              style: TextStyle(color: Colors.white, fontSize: 13.sp, fontWeight: FontWeight.w700),
             ),
             Text(
               subtitle,
-              style: TextStyle(color: Colors.white38, fontSize: 10.sp),
+              style: TextStyle(color: AppColors.greyBase.withOpacity(0.6), fontSize: 10.sp),
             ),
           ],
         ),
@@ -377,98 +436,122 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
     );
   }
 
-  Widget _buildTabMenu(bool isScanning) {
+  Widget _buildTabMenu() {
     return Container(
-      height: 40.h,
-      margin: EdgeInsets.only(bottom: 10.h),
+      height: 42.h,
+      padding: EdgeInsets.symmetric(horizontal: 8.w),
       child: TabBar(
         controller: _tabController,
         isScrollable: true,
         dividerColor: Colors.transparent,
-        indicatorColor: AppColors.primary,
-        indicatorWeight: 3,
-        indicatorSize: TabBarIndicatorSize.label,
+        tabAlignment: TabAlignment.start,
+        indicator: BoxDecoration(
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(20.r),
+          border: Border.all(color: AppColors.primary, width: 1.5),
+        ),
+        indicatorSize: TabBarIndicatorSize.tab,
         labelColor: Colors.white,
-        unselectedLabelColor: AppColors.greyBase.withValues(alpha: 0.4),
-        labelStyle: TextStyle(fontSize: 14.sp, fontWeight: FontWeight.w800, letterSpacing: 0.5),
-        unselectedLabelStyle: TextStyle(fontSize: 14.sp, fontWeight: FontWeight.w600),
+        unselectedLabelColor: AppColors.greyBase.withOpacity(0.5),
+        labelStyle: TextStyle(fontSize: 13.sp, fontWeight: FontWeight.w800),
+        unselectedLabelStyle: TextStyle(fontSize: 13.sp, fontWeight: FontWeight.w600),
         padding: EdgeInsets.symmetric(horizontal: 16.w),
         tabs: const [
-          Tab(text: "Songs"),
-          Tab(text: "Playlists"),
-          Tab(text: "Artists"),
-          Tab(text: "Albums"),
-          Tab(text: "Genres"),
-          Tab(text: "Folders"),
+          Tab(text: "  Songs  "),
+          Tab(text: "  Playlists  "),
+          Tab(text: "  Artists  "),
+          Tab(text: "  Albums  "),
+          Tab(text: "  Genres  "),
+          Tab(text: "  Folders  "),
         ],
       ),
     );
   }
 
   Widget _buildCircleButton({required IconData icon, required VoidCallback onPressed}) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(50.r),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-        child: Container(
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.05),
-            shape: BoxShape.circle,
-            border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
-          ),
-          child: IconButton(
-            onPressed: onPressed,
-            icon: Icon(icon, color: Colors.white, size: 22.sp),
-          ),
-        ),
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        shape: BoxShape.circle,
+        border: Border.all(color: Colors.white.withOpacity(0.05)),
+      ),
+      child: IconButton(
+        onPressed: onPressed,
+        icon: Icon(icon, color: Colors.white, size: 20.sp),
       ),
     );
   }
 
-  Widget _buildSearchBar(BuildContext context) {
+  Widget _buildSearchBar(BuildContext context, bool isScanning) {
     return Padding(
-      padding: EdgeInsets.all(24.w),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(20.r),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
-          child: Container(
-            height: 54.h,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.05),
-              borderRadius: BorderRadius.circular(20.r),
-              border: Border.all(
-                color: _isSearchActive ? AppColors.primary.withValues(alpha: 0.4) : Colors.white.withValues(alpha: 0.08),
+      padding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 16.h),
+      child: Opacity(
+        opacity: isScanning ? 0.6 : 1.0,
+        child: TextField(
+          controller: _searchController,
+          enabled: !isScanning,
+          onChanged: (value) {
+            final scannerState = _scannerBloc.state;
+            if (scannerState is MusicScannerSuccess) {
+              _searchBloc.add(SearchQueryChangedEvent(value, scannerState.songs));
+            }
+          },
+          onTap: () => setState(() => _isSearchActive = true),
+          textAlignVertical: TextAlignVertical.center,
+          style: TextStyle(color: Colors.white, fontSize: 14.sp, fontWeight: FontWeight.w500),
+          cursorColor: AppColors.primary,
+          decoration: InputDecoration(
+            hintText: "Search music...",
+            hintStyle: TextStyle(color: AppColors.greyBase.withOpacity(0.4), fontSize: 13.sp),
+            prefixIcon: Icon(
+              Icons.search_rounded,
+              color: _isSearchActive ? AppColors.primary : AppColors.greyBase.withOpacity(0.4),
+              size: 20.sp,
+            ),
+            suffixIcon: _isSearchActive
+                ? IconButton(
+              icon: Icon(Icons.close_rounded, color: Colors.white70, size: 20.sp),
+              onPressed: () {
+                _searchController.clear();
+                _searchBloc.add(ClearSearchEvent());
+                setState(() => _isSearchActive = false);
+                FocusScope.of(context).unfocus();
+              },
+            )
+                : null,
+
+            // Background Styling
+            filled: true,
+            fillColor: AppColors.surface,
+            contentPadding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 14.h),
+
+            // Border Styling for all states
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(26.r),
+              borderSide: BorderSide(
+                color: Colors.white.withOpacity(0.05),
+                width: 1.2,
               ),
             ),
-            child: TextField(
-              controller: _searchController,
-              onChanged: (value) {
-                final scannerState = _scannerBloc.state;
-                if (scannerState is MusicScannerSuccess) {
-                  _searchBloc.add(SearchQueryChangedEvent(value, scannerState.songs));
-                }
-              },
-              onTap: () => setState(() => _isSearchActive = true),
-              style: TextStyle(color: Colors.white, fontSize: 15.sp, fontWeight: FontWeight.w500),
-              cursorColor: AppColors.primary,
-              decoration: InputDecoration(
-                hintText: "Search track, artist...",
-                hintStyle: TextStyle(color: AppColors.greyBase.withValues(alpha: 0.4), fontSize: 14.sp),
-                prefixIcon: Icon(Icons.search_rounded, color: _isSearchActive ? AppColors.primary : AppColors.greyBase.withValues(alpha: 0.4), size: 22.sp),
-                suffixIcon: _isSearchActive
-                    ? IconButton(
-                        icon: const Icon(Icons.close_rounded, color: Colors.white70),
-                        onPressed: () {
-                          _searchController.clear();
-                          _searchBloc.add(ClearSearchEvent());
-                          setState(() => _isSearchActive = false);
-                          FocusScope.of(context).unfocus();
-                        },
-                      )
-                    : null,
-                border: InputBorder.none,
-                contentPadding: EdgeInsets.symmetric(vertical: 14.h),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(26.r),
+              borderSide: BorderSide(
+                color: Colors.white.withOpacity(0.05),
+                width: 1.2,
+              ),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(26.r),
+              borderSide: BorderSide(
+                color: AppColors.primary.withOpacity(0.3),
+                width: 1.2,
+              ),
+            ),
+            disabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(26.r),
+              borderSide: BorderSide(
+                color: Colors.white.withOpacity(0.02),
+                width: 1.2,
               ),
             ),
           ),
@@ -485,18 +568,21 @@ class _BeautifulLoader extends StatefulWidget {
   State<_BeautifulLoader> createState() => _BeautifulLoaderState();
 }
 
-class _BeautifulLoaderState extends State<_BeautifulLoader> with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
+class _BeautifulLoaderState extends State<_BeautifulLoader> with TickerProviderStateMixin {
+  late AnimationController _rotateController;
+  late AnimationController _pulseController;
 
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(vsync: this, duration: const Duration(seconds: 2))..repeat();
+    _rotateController = AnimationController(vsync: this, duration: const Duration(milliseconds: 2000))..repeat();
+    _pulseController = AnimationController(vsync: this, duration: const Duration(milliseconds: 1000))..repeat(reverse: true);
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _rotateController.dispose();
+    _pulseController.dispose();
     super.dispose();
   }
 
@@ -510,38 +596,39 @@ class _BeautifulLoaderState extends State<_BeautifulLoader> with SingleTickerPro
             alignment: Alignment.center,
             children: [
               RotationTransition(
-                turns: _controller,
+                turns: _rotateController,
                 child: Container(
-                  width: 60.w, height: 60.w,
+                  width: 50.w,
+                  height: 50.w,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    border: Border.all(color: AppColors.primary.withValues(alpha: 0.2), width: 4),
+                    border: Border.all(
+                      color: AppColors.primary.withOpacity(0.1),
+                      width: 2,
+                    ),
                   ),
-                ),
-              ),
-              RotationTransition(
-                turns: Tween(begin: 1.0, end: 0.0).animate(_controller),
-                child: SizedBox(
-                  width: 60.w, height: 60.w,
                   child: CircularProgressIndicator(
-                    value: 0.3,
-                    strokeWidth: 4,
+                    strokeWidth: 2,
                     valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
-                    strokeCap: StrokeCap.round,
                   ),
                 ),
               ),
-              Icon(Icons.music_note_rounded, color: AppColors.primary, size: 24.sp),
+              ScaleTransition(
+                scale: Tween(begin: 0.8, end: 1.1).animate(
+                  CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+                ),
+                child: Icon(Icons.music_note_rounded, color: AppColors.primary, size: 24.sp),
+              ),
             ],
           ),
-          SizedBox(height: 20.h),
+          SizedBox(height: 24.h),
           Text(
-            "SYNCING LIBRARY...",
+            "SYNCING LIBRARY",
             style: TextStyle(
-              color: AppColors.greyBase.withValues(alpha: 0.5),
-              fontSize: 10.sp,
+              color: Colors.white.withOpacity(0.7),
+              fontSize: 11.sp,
               fontWeight: FontWeight.w900,
-              letterSpacing: 2,
+              letterSpacing: 2.0,
             ),
           ),
         ],
@@ -556,19 +643,19 @@ class _SearchResultsView extends ConsumerWidget {
     return BlocBuilder<MusicSearchBloc, MusicSearchState>(
       builder: (context, state) {
         if (state.query.isEmpty) {
-          return Center(child: Text("Start searching...", style: TextStyle(color: AppColors.greyBase.withValues(alpha: 0.5))));
+          return Center(child: Text("Search for your favorite tracks", style: TextStyle(color: AppColors.greyBase.withOpacity(0.5))));
         }
         if (state.isSearching) {
           return const _BeautifulLoader();
         }
         if (state.searchResults.isEmpty) {
-          return Center(child: Text("No results found", style: TextStyle(color: AppColors.greyBase)));
+          return Center(child: Text("No tracks found", style: TextStyle(color: AppColors.greyBase)));
         }
         return ListView.builder(
           physics: const BouncingScrollPhysics(),
-          padding: EdgeInsets.fromLTRB(24.w, 0, 24.w, 100.h),
+          padding: EdgeInsets.fromLTRB(24.w, 16.h, 24.w, 100.h),
           itemCount: state.searchResults.length,
-          itemBuilder: (context, index) => _SongTile(song: state.searchResults[index], songs: state.searchResults, index: index),
+          itemBuilder: (context, index) => SongTile(song: state.searchResults[index], songs: state.searchResults, index: index),
         );
       },
     );
@@ -588,9 +675,9 @@ class _SongsTabView extends ConsumerWidget {
           }
           return ListView.builder(
             physics: const BouncingScrollPhysics(),
-            padding: EdgeInsets.fromLTRB(24.w, 0, 24.w, 100.h),
+            padding: EdgeInsets.fromLTRB(24.w, 16.h, 24.w, 100.h),
             itemCount: state.songs.length,
-            itemBuilder: (context, index) => _SongTile(song: state.songs[index], songs: state.songs, index: index),
+            itemBuilder: (context, index) => SongTile(song: state.songs[index], songs: state.songs, index: index),
           );
         } else if (state is MusicScannerFailure) {
           return Center(child: Text(state.message, style: const TextStyle(color: AppColors.error)));
@@ -612,12 +699,15 @@ class _PlaylistsTabView extends ConsumerWidget {
         final playlists = state is PlaylistSuccess ? state.playlists : <Playlist>[];
         return ListView(
           physics: const BouncingScrollPhysics(),
-          padding: EdgeInsets.fromLTRB(24.w, 0, 24.w, 100.h),
+          padding: EdgeInsets.fromLTRB(24.w, 16.h, 24.w, 100.h),
           children: [
             _buildCreatePlaylistButton(context, playlistBloc),
-            SizedBox(height: 20.h),
+            SizedBox(height: 16.h),
             if (playlists.isEmpty)
-              Center(child: Text("Empty Library", style: TextStyle(color: AppColors.greyBase.withValues(alpha: 0.3))))
+              Padding(
+                padding: EdgeInsets.only(top: 40.h),
+                child: Center(child: Text("No playlists created yet", style: TextStyle(color: AppColors.greyBase.withOpacity(0.3)))),
+              )
             else
               ...playlists.map((p) => _PlaylistTile(playlist: p)),
           ],
@@ -629,20 +719,20 @@ class _PlaylistsTabView extends ConsumerWidget {
   Widget _buildCreatePlaylistButton(BuildContext context, PlaylistBloc bloc) {
     return InkWell(
       onTap: () => _showCreateDialog(context, bloc),
-      borderRadius: BorderRadius.circular(20.r),
+      borderRadius: BorderRadius.circular(24.r),
       child: Container(
-        padding: EdgeInsets.all(16.w),
+        padding: EdgeInsets.symmetric(vertical: 18.h),
         decoration: BoxDecoration(
-          color: AppColors.primary.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(20.r),
-          border: Border.all(color: AppColors.primary.withValues(alpha: 0.2), width: 1.5),
+          color: AppColors.primary.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(24.r),
+          border: Border.all(color: AppColors.primary.withOpacity(0.2), width: 1.2),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.add_circle_outline_rounded, color: AppColors.primary, size: 22.sp),
-            SizedBox(width: 10.w),
-            Text("Create New Playlist", style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 14.sp)),
+            Icon(Icons.add_rounded, color: AppColors.primary, size: 22.sp),
+            SizedBox(width: 8.w),
+            Text("Create New Playlist", style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 13.sp)),
           ],
         ),
       ),
@@ -655,20 +745,20 @@ class _PlaylistsTabView extends ConsumerWidget {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.surface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24.r)),
-        title: const Text("New Playlist", style: TextStyle(fontWeight: FontWeight.w900)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28.r)),
+        title: const Text("New Playlist", style: TextStyle(fontWeight: FontWeight.w900, color: Colors.white)),
         content: TextField(
           controller: controller,
           autofocus: true,
           style: const TextStyle(color: Colors.white),
           decoration: InputDecoration(
             hintText: "Enter name",
-            hintStyle: TextStyle(color: Colors.white24),
+            hintStyle: TextStyle(color: Colors.white24, fontSize: 14.sp),
             focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: AppColors.primary)),
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("CANCEL")),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: Text("CANCEL", style: TextStyle(color: AppColors.greyBase, fontSize: 12.sp))),
           TextButton(
             onPressed: () {
               if (controller.text.isNotEmpty) {
@@ -676,7 +766,7 @@ class _PlaylistsTabView extends ConsumerWidget {
                 Navigator.pop(ctx);
               }
             },
-            child: const Text("CREATE", style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
+            child: Text("CREATE", style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 12.sp)),
           ),
         ],
       ),
@@ -691,26 +781,26 @@ class _PlaylistTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Container(
-      margin: EdgeInsets.only(bottom: 16.h),
+      margin: EdgeInsets.only(bottom: 12.h),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.03),
-        borderRadius: BorderRadius.circular(20.r),
+        color: AppColors.surface.withOpacity(0.4),
+        borderRadius: BorderRadius.circular(24.r),
       ),
       child: ListTile(
-        contentPadding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
+        contentPadding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 4.h),
         leading: Container(
-          width: 54.w,
-          height: 54.w,
+          width: 50.w,
+          height: 50.w,
           decoration: BoxDecoration(
-            color: AppColors.primary.withValues(alpha: 0.1),
+            color: AppColors.primary.withOpacity(0.1),
             borderRadius: BorderRadius.circular(16.r),
           ),
-          child: Icon(Icons.playlist_play_rounded, color: AppColors.primary, size: 28.sp),
+          child: Icon(Icons.playlist_play_rounded, color: AppColors.primary, size: 26.sp),
         ),
-        title: Text(playlist.name, style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15.sp)),
-        subtitle: Text("${playlist.songPaths.length} tracks", style: TextStyle(color: AppColors.greyBase, fontSize: 12.sp)),
+        title: Text(playlist.name, style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14.sp)),
+        subtitle: Text("${playlist.songPaths.length} tracks", style: TextStyle(color: AppColors.greyBase.withOpacity(0.6), fontSize: 11.sp)),
         trailing: IconButton(
-          icon: Icon(Icons.delete_outline_rounded, color: Colors.white24, size: 20.sp),
+          icon: Icon(Icons.delete_outline_rounded, color: AppColors.error.withOpacity(0.4), size: 20.sp),
           onPressed: () => ref.read(playlistBlocProvider).add(DeletePlaylistEvent(playlist.id)),
         ),
         onTap: () {
@@ -747,34 +837,34 @@ class _LibraryGroupView extends StatelessWidget {
           case LibraryGroupType.folder: data = state.folders; break;
         }
         final keys = data.keys.toList()..sort();
-        if (keys.isEmpty) return Center(child: Text("Nothing here yet", style: TextStyle(color: AppColors.greyBase.withValues(alpha: 0.3))));
+        if (keys.isEmpty) return Center(child: Text("No items found", style: TextStyle(color: AppColors.greyBase.withOpacity(0.3))));
 
         return ListView.builder(
           physics: const BouncingScrollPhysics(),
-          padding: EdgeInsets.fromLTRB(24.w, 0, 24.w, 100.h),
+          padding: EdgeInsets.fromLTRB(24.w, 16.h, 24.w, 100.h),
           itemCount: keys.length,
           itemBuilder: (context, index) {
             final key = keys[index];
             final songs = data[key]!;
             return Container(
-              margin: EdgeInsets.only(bottom: 16.h),
+              margin: EdgeInsets.only(bottom: 12.h),
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.03),
-                borderRadius: BorderRadius.circular(20.r),
+                color: AppColors.surface.withOpacity(0.4),
+                borderRadius: BorderRadius.circular(24.r),
               ),
               child: ListTile(
-                contentPadding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
+                contentPadding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 6.h),
                 leading: Container(
-                  width: 54.w, height: 54.w,
+                  width: 50.w, height: 50.w,
                   decoration: BoxDecoration(
-                    color: AppColors.taupeDark.withValues(alpha: 0.1),
+                    color: AppColors.taupeDark.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(16.r),
                   ),
-                  child: Icon(_getIcon(), color: AppColors.taupeLight, size: 26.sp),
+                  child: Icon(_getIcon(), color: AppColors.taupeLight, size: 24.sp),
                 ),
-                title: Text(key, style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15.sp)),
-                subtitle: Text("${songs.length} tracks", style: TextStyle(color: AppColors.greyBase, fontSize: 12.sp)),
-                trailing: Icon(Icons.chevron_right_rounded, color: Colors.white12),
+                title: Text(key, style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14.sp)),
+                subtitle: Text("${songs.length} tracks", style: TextStyle(color: AppColors.greyBase.withOpacity(0.6), fontSize: 11.sp)),
+                trailing: Icon(Icons.chevron_right_rounded, color: Colors.white12, size: 20.sp),
                 onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => CategoryDetailScreen(
                   title: key,
                   songs: songs,
@@ -798,43 +888,44 @@ class _LibraryGroupView extends StatelessWidget {
   }
 }
 
-class _SongTile extends ConsumerWidget {
+class SongTile extends ConsumerWidget {
   final Song song;
   final List<Song>? songs;
   final int? index;
-  const _SongTile({required this.song, this.songs, this.index});
+  const SongTile({super.key, required this.song, this.songs, this.index});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Container(
-      margin: EdgeInsets.only(bottom: 16.h),
+      margin: EdgeInsets.only(bottom: 12.h),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.03),
-        borderRadius: BorderRadius.circular(20.r),
+        color: AppColors.surface.withOpacity(0.4),
+        borderRadius: BorderRadius.circular(24.r),
       ),
       child: ListTile(
-        contentPadding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 4.h),
+        contentPadding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 2.h),
         onTap: () async {
-          // Explicitly dismiss keyboard before navigation to prevent overflow/screen tear
           FocusScope.of(context).unfocus();
-          
           final handler = ref.read(audioHandlerProvider) as RhodaAudioHandler;
           final queue = songs ?? [song];
+          
+          // First tap logic check: Ensure the handler starts immediately
           await handler.setQueueAndPlay(queue.map((s) => s.toMediaItem()).toList(), index ?? 0);
+
           if (context.mounted) {
             Navigator.push(context, MaterialPageRoute(builder: (context) => const PlayerScreen()));
           }
         },
         leading: ClipRRect(
-          borderRadius: BorderRadius.circular(14.r),
+          borderRadius: BorderRadius.circular(16.r),
           child: Container(
-            height: 52.w, width: 52.w,
-            color: AppColors.taupeDark.withValues(alpha: 0.2),
-            child: Image.asset('assets/images/app_icon.png', fit: BoxFit.cover),
+            height: 50.w, width: 50.w,
+            color: AppColors.taupeDark.withOpacity(0.1),
+            child: Icon(Icons.music_note_rounded, color: AppColors.primary.withOpacity(0.5), size: 24.sp),
           ),
         ),
-        title: Text(song.title, style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14.sp), maxLines: 1, overflow: TextOverflow.ellipsis),
-        subtitle: Text(song.artist, style: TextStyle(color: AppColors.greyBase, fontSize: 11.sp), maxLines: 1, overflow: TextOverflow.ellipsis),
+        title: Text(song.title, style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13.sp), maxLines: 1, overflow: TextOverflow.ellipsis),
+        subtitle: Text(song.artist, style: TextStyle(color: AppColors.greyBase.withOpacity(0.5), fontSize: 11.sp), maxLines: 1, overflow: TextOverflow.ellipsis),
         trailing: _buildTrailingMenu(context, ref),
       ),
     );
@@ -851,21 +942,16 @@ class _SongTile extends ConsumerWidget {
         }
 
         return PopupMenuButton<String>(
-          icon: Icon(Icons.more_horiz_rounded, color: Colors.white24),
+          icon: Icon(Icons.more_vert_rounded, color: Colors.white24, size: 20.sp),
           color: AppColors.surface,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16.r)),
+          elevation: 8,
+          offset: const Offset(0, 40),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20.r)),
           onSelected: (value) {
             if (value == 'add') {
               _showPlaylistSelector(context, ref);
             } else if (value == 'toggle_fav') {
               playlistBloc.add(ToggleFavouriteEvent(song.id));
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(isLiked ? "Removed from Favorites" : "Added to Favorites"),
-                  backgroundColor: AppColors.primary,
-                  duration: const Duration(seconds: 1),
-                ),
-              );
             }
           },
           itemBuilder: (context) => [
@@ -874,9 +960,9 @@ class _SongTile extends ConsumerWidget {
               child: Row(
                 children: [
                   Icon(isLiked ? Icons.favorite_rounded : Icons.favorite_border_rounded, 
-                      color: isLiked ? Colors.redAccent : Colors.white70, size: 20),
-                  SizedBox(width: 10.w),
-                  Text(isLiked ? "Remove Favorite" : "Add to Favorites", style: const TextStyle(fontSize: 13)),
+                      color: isLiked ? Colors.redAccent : Colors.white70, size: 18.sp),
+                  SizedBox(width: 12.w),
+                  Text(isLiked ? "Remove Favorite" : "Add to Favorites", style: TextStyle(fontSize: 12.sp, fontWeight: FontWeight.w600)),
                 ],
               ),
             ),
@@ -884,9 +970,9 @@ class _SongTile extends ConsumerWidget {
               value: 'add', 
               child: Row(
                 children: [
-                  Icon(Icons.playlist_add_rounded, color: Colors.white70, size: 20),
-                  SizedBox(width: 10.w),
-                  Text("Add to Playlist", style: TextStyle(fontSize: 13)),
+                  Icon(Icons.playlist_add_rounded, color: Colors.white70, size: 18.sp),
+                  SizedBox(width: 12.w),
+                  Text("Add to Playlist", style: TextStyle(fontSize: 12.sp, fontWeight: FontWeight.w600)),
                 ],
               ),
             ),
@@ -901,7 +987,7 @@ class _SongTile extends ConsumerWidget {
     showModalBottomSheet(
       context: context,
       backgroundColor: AppColors.surface,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(28.r))),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(32.r))),
       builder: (sheetContext) => BlocBuilder<PlaylistBloc, PlaylistState>(
         bloc: playlistBloc,
         builder: (context, state) {
@@ -912,10 +998,10 @@ class _SongTile extends ConsumerWidget {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text("Add to Playlist", style: TextStyle(color: Colors.white, fontSize: 20.sp, fontWeight: FontWeight.w900)),
+                Text("Select Playlist", style: TextStyle(color: Colors.white, fontSize: 18.sp, fontWeight: FontWeight.w900)),
                 SizedBox(height: 20.h),
                 if (playlists.isEmpty)
-                  Padding(padding: EdgeInsets.symmetric(vertical: 20.h), child: Center(child: Text("No playlists", style: TextStyle(color: Colors.white24))))
+                  Padding(padding: EdgeInsets.symmetric(vertical: 30.h), child: Center(child: Text("No playlists available", style: TextStyle(color: Colors.white24, fontSize: 13.sp))))
                 else
                   Flexible(
                     child: ListView.builder(
@@ -926,11 +1012,10 @@ class _SongTile extends ConsumerWidget {
                         return ListTile(
                           contentPadding: EdgeInsets.zero,
                           leading: Icon(Icons.playlist_add_rounded, color: AppColors.primary),
-                          title: Text(p.name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                          title: Text(p.name, style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 14.sp)),
                           onTap: () {
                             playlistBloc.add(AddSongToPlaylistEvent(p.id, song.id));
                             Navigator.pop(sheetContext);
-                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Added to ${p.name}"), backgroundColor: AppColors.primary));
                           },
                         );
                       },
@@ -963,25 +1048,25 @@ class MiniPlayer extends ConsumerWidget {
         Navigator.push(context, MaterialPageRoute(builder: (context) => const PlayerScreen()));
       },
       child: Container(
-        height: 72.h,
-        margin: EdgeInsets.fromLTRB(16.w, 0, 16.w, 24.h),
-        padding: EdgeInsets.symmetric(horizontal: 12.w),
+        height: 70.h,
+        margin: EdgeInsets.fromLTRB(16.w, 0, 16.w, 20.h),
+        padding: EdgeInsets.symmetric(horizontal: 14.w),
         decoration: BoxDecoration(
-          color: AppColors.surface.withValues(alpha: 0.9),
+          color: AppColors.surface,
           borderRadius: BorderRadius.circular(24.r),
           boxShadow: [
-            BoxShadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 25, offset: const Offset(0, 8)),
+            BoxShadow(color: Colors.black.withOpacity(0.5), blurRadius: 30, offset: const Offset(0, 10)),
           ],
-          border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+          border: Border.all(color: Colors.white.withOpacity(0.05)),
         ),
         child: Row(
           children: [
             ClipRRect(
-              borderRadius: BorderRadius.circular(14.r),
+              borderRadius: BorderRadius.circular(12.r),
               child: Container(
-                height: 48.w, width: 48.w,
-                color: AppColors.taupeDark.withValues(alpha: 0.2),
-                child: Image.asset('assets/images/app_icon.png', fit: BoxFit.cover),
+                height: 44.w, width: 44.w,
+                color: AppColors.taupeDark.withOpacity(0.1),
+                child: Icon(Icons.music_note_rounded, color: AppColors.primary, size: 22.sp),
               ),
             ),
             SizedBox(width: 14.w),
@@ -990,18 +1075,40 @@ class MiniPlayer extends ConsumerWidget {
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(currentItem.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14.sp)),
-                  Text(currentItem.artist ?? "Unknown", maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: AppColors.greyBase, fontSize: 11.sp)),
+                  Text(currentItem.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13.sp)),
+                  Text(currentItem.artist ?? "Unknown", maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: AppColors.greyBase.withOpacity(0.5), fontSize: 11.sp)),
                 ],
               ),
             ),
             IconButton(
               onPressed: () => playing ? handler.pause() : handler.play(),
-              icon: Icon(playing ? Icons.pause_rounded : Icons.play_arrow_rounded, color: AppColors.primary, size: 32.sp),
+              icon: Icon(playing ? Icons.pause_circle_filled_rounded : Icons.play_circle_filled_rounded, color: AppColors.primary, size: 36.sp),
             ),
           ],
         ),
       ),
     );
+  }
+}
+
+class _TabPersistentHeaderDelegate extends SliverPersistentHeaderDelegate {
+  final Widget child;
+  final double height;
+
+  _TabPersistentHeaderDelegate({required this.child, required this.height});
+
+  @override
+  double get minExtent => height;
+  @override
+  double get maxExtent => height;
+
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+    return child;
+  }
+
+  @override
+  bool shouldRebuild(covariant _TabPersistentHeaderDelegate oldDelegate) {
+    return false;
   }
 }

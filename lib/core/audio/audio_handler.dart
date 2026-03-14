@@ -1,6 +1,18 @@
+import 'dart:io';
 import 'package:audio_service/audio_service.dart';
+import 'package:audio_session/audio_session.dart';
 import 'package:flutter/services.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:rxdart/rxdart.dart';
+
+class PositionData {
+  final Duration position;
+  final Duration bufferedPosition;
+  final Duration duration;
+
+  PositionData(this.position, this.bufferedPosition, this.duration);
+}
 
 class RhodaAudioHandler extends BaseAudioHandler with SeekHandler, QueueHandler {
   final AndroidEqualizer _equalizer = AndroidEqualizer();
@@ -14,49 +26,111 @@ class RhodaAudioHandler extends BaseAudioHandler with SeekHandler, QueueHandler 
       ),
     );
 
-    // Combine multiple streams to ensure PlaybackState is updated whenever any relevant state changes
-    _player.playbackEventStream.listen((event) => _broadcastState());
-    _player.loopModeStream.listen((event) => _broadcastState());
-    _player.shuffleModeEnabledStream.listen((event) => _broadcastState());
-    _player.playerStateStream.listen((event) => _broadcastState());
+    _init();
+  }
 
-    // Listen to changes in the current item
-    _player.currentIndexStream.listen((index) {
-      if (index != null && queue.value.isNotEmpty && index < queue.value.length) {
-        mediaItem.add(queue.value[index]);
+  Future<void> _init() async {
+    // 1. Configure Audio Session
+    final session = await AudioSession.instance;
+    await session.configure(const AudioSessionConfiguration.music());
+
+    // 2. Handle Audio Interruptions
+    session.interruptionEventStream.listen((event) {
+      if (event.begin) {
+        switch (event.type) {
+          case AudioInterruptionType.duck:
+            _player.setVolume(0.5);
+            break;
+          case AudioInterruptionType.pause:
+          case AudioInterruptionType.unknown:
+            pause();
+            break;
+        }
+      } else {
+        switch (event.type) {
+          case AudioInterruptionType.duck:
+            _player.setVolume(1.0);
+            break;
+          case AudioInterruptionType.pause:
+            play();
+            break;
+          case AudioInterruptionType.unknown:
+            break;
+        }
       }
     });
 
-    // Handle completions by skipping to next
-    _player.processingStateStream.listen((state) {
-      if (state == ProcessingState.completed) {
-        skipToNext();
+    // 3. Handle Becoming Noisy
+    session.becomingNoisyEventStream.listen((_) => pause());
+
+    // 4. Reactive State Management
+    Rx.merge([
+      _player.playbackEventStream,
+      _player.loopModeStream,
+      _player.shuffleModeEnabledStream,
+      _player.playerStateStream,
+    ]).listen((_) => _broadcastState());
+
+    // 5. Sync MediaItem with current sequence source
+    _player.sequenceStateStream.listen((state) {
+      final item = state?.currentSource?.tag as MediaItem?;
+      if (item != null) {
+        mediaItem.add(item);
       }
     });
-    
+
+    // 6. Native Looping & Completion Watchdog
+    _player.playerStateStream.listen((state) {
+      if (state.processingState == ProcessingState.completed) {
+        if (state.playing) {
+          if (_player.loopMode == LoopMode.one) {
+            _player.seek(Duration.zero);
+            _player.play();
+          } else {
+            _player.pause();
+          }
+        }
+      }
+    });
+
     _initEqualizer();
   }
-  
+
   Future<void> _initEqualizer() async {
     try {
-      // Warm up the equalizer parameters to check if it's available
       await _equalizer.parameters;
       _isEqualizerReady = true;
     } catch (e) {
       _isEqualizerReady = false;
-      print("Equalizer initialization failed: $e");
     }
   }
 
   AndroidEqualizer get equalizer => _equalizer;
   bool get isEqualizerReady => _isEqualizerReady;
 
+  Stream<PositionData> get positionDataStream =>
+      Rx.combineLatest3<Duration, Duration, Duration?, PositionData>(
+        _player.positionStream,
+        _player.bufferedPositionStream,
+        _player.durationStream,
+        (position, bufferedPosition, duration) =>
+            PositionData(position, bufferedPosition, duration ?? Duration.zero),
+      );
+
   void _broadcastState() {
     playbackState.add(_transformEvent());
   }
 
   @override
-  Future<void> play() => _player.play();
+  Future<void> play() async {
+    final session = await AudioSession.instance;
+    if (await session.setActive(true)) {
+      if (_player.processingState == ProcessingState.completed) {
+        await _player.seek(Duration.zero);
+      }
+      _player.play();
+    }
+  }
 
   @override
   Future<void> pause() => _player.pause();
@@ -65,7 +139,11 @@ class RhodaAudioHandler extends BaseAudioHandler with SeekHandler, QueueHandler 
   Future<void> seek(Duration position) => _player.seek(position);
 
   @override
-  Future<void> stop() => _player.stop();
+  Future<void> stop() async {
+    await _player.stop();
+    final session = await AudioSession.instance;
+    await session.setActive(false);
+  }
 
   @override
   Future<void> skipToNext() => _player.seekToNext();
@@ -104,44 +182,57 @@ class RhodaAudioHandler extends BaseAudioHandler with SeekHandler, QueueHandler 
     await _player.seek(Duration.zero, index: index);
   }
 
-  Future<void> setQueueAndPlay(List<MediaItem> newQueue, int index) async {
-    try {
-      if (_isQueueSame(queue.value, newQueue)) {
-        await skipToQueueItem(index);
-      } else {
-        queue.add(newQueue);
-        final audioSource = ConcatenatingAudioSource(
-          children: newQueue.map((item) {
-            if (item.id.startsWith('asset:///')) {
-              // Handle Flutter assets
-              return AudioSource.uri(Uri.parse(item.id));
-            } else {
-              // Handle local files
-              return AudioSource.file(item.id);
-            }
-          }).toList(),
-        );
-        await _player.setAudioSource(audioSource, initialIndex: index);
+  Future<AudioSource> _resolveAudioSource(MediaItem item) async {
+    if (item.id.startsWith('asset:///')) {
+      try {
+        final assetPath = item.id.replaceFirst('asset:///', '');
+        final appDir = await getApplicationSupportDirectory();
+        final persistentFolder = Directory('${appDir.path}/media_assets');
+        
+        if (!await persistentFolder.exists()) {
+          await persistentFolder.create(recursive: true);
+        }
+        
+        final fileName = assetPath.replaceAll('/', '_');
+        final localFile = File('${persistentFolder.path}/$fileName');
+
+        if (!await localFile.exists() || (await localFile.length()) == 0) {
+          final data = await rootBundle.load(assetPath);
+          final bytes = data.buffer.asUint8List();
+          await localFile.writeAsBytes(bytes, flush: true);
+        }
+        
+        return AudioSource.file(localFile.localPath, tag: item);
+      } catch (e) {
+        return AudioSource.uri(Uri.parse(item.id), tag: item);
       }
-      play();
+    } else {
+      return AudioSource.file(item.id, tag: item);
+    }
+  }
+
+  Future<void> setQueueAndPlay(List<MediaItem> newQueue, int index) async {
+    mediaItem.add(newQueue[index]);
+    queue.add(newQueue);
+
+    try {
+      final List<AudioSource> sources = await Future.wait(
+        newQueue.map((item) => _resolveAudioSource(item))
+      );
+
+      final playlist = ConcatenatingAudioSource(
+        useLazyPreparation: true,
+        children: sources,
+      );
+      
+      await _player.setAudioSource(playlist, initialIndex: index);
+      await play();
     } catch (e) {
-      if (e is PlatformException && e.message?.contains("android.media.audiofx.Equalizer.getNumberOfBands()") == true) {
-        // If equalizer fails, try to load without it if possible, or just retry the load part.
-        // Usually, the error happens during the load() call inside setAudioSource if the pipeline fails.
-        print("Caught Equalizer NPE, retrying without audio effects if necessary...");
-        // Re-attempting or just ignoring the error to let playback continue
+      if (e is PlatformException && e.message?.contains("android.media.audiofx.Equalizer") == true) {
       } else {
         rethrow;
       }
     }
-  }
-
-  bool _isQueueSame(List<MediaItem> q1, List<MediaItem> q2) {
-    if (q1.length != q2.length) return false;
-    for (int i = 0; i < q1.length; i++) {
-      if (q1[i].id != q2[i].id) return false;
-    }
-    return true;
   }
 
   PlaybackState _transformEvent() {
@@ -182,4 +273,8 @@ class RhodaAudioHandler extends BaseAudioHandler with SeekHandler, QueueHandler 
           : AudioServiceShuffleMode.none,
     );
   }
+}
+
+extension FileExt on File {
+  String get localPath => path;
 }

@@ -15,3 +15,8 @@ final playbackStateProvider = StreamProvider<PlaybackState>((ref) {
   final handler = ref.watch(audioHandlerProvider);
   return handler.playbackState;
 });
+
+final positionDataProvider = StreamProvider<PositionData>((ref) {
+  final handler = ref.watch(audioHandlerProvider) as RhodaAudioHandler;
+  return handler.positionDataStream;
+});
